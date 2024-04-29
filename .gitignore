@@ -1,4 +1,5 @@
 build/
 out/
+roms/test/
 *.tmp
 *.log

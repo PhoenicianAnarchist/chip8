@@ -1,6 +1,7 @@
 #include <algorithm> // std::copy
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 #include "interpreter.hpp"
 
@@ -163,12 +164,13 @@ void kate::Interpreter::_DXYN() {
   // each row in the sprite is 1 byte wide, stored sequentially
   for (std::size_t i = 0; i < n; ++i) {
     std::uint8_t data = ram[index_register + i];
-
-    std::uint8_t pixel_offset = v_offset * SCR_W;
+    std::uint8_t ypos = v_offset + i;
+    std::size_t pixel_offset = ypos * SCR_W;
 
     // loop over pixels
-    for (int p = 8; p > 0; --p) {
-      std::uint8_t pixel_index = h_offset + pixel_offset;
+    for (int p = 7; p >= 0; --p) {
+      std::uint8_t xpos = h_offset + (7 - p);
+      std::size_t pixel_index = xpos + pixel_offset;
 
       bool pixel = (data >> p) & 1;
 
@@ -180,16 +182,14 @@ void kate::Interpreter::_DXYN() {
       // screen is updated via xor
       output_buffer[pixel_index] ^= pixel;
 
-      ++h_offset;
       // skip to next line if edge of screen reached
-      if (h_offset >= SCR_W) {
+      if (xpos >= SCR_W) {
         break;
       }
     }
 
-    ++v_offset;
     // stop drawing if off bottom of screen
-    if (v_offset >= SCR_H) {
+    if (ypos >= SCR_H) {
       break;
     }
   }

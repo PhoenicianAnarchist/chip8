@@ -54,5 +54,5 @@ int utils::save_pnm(
   std::stringstream ss;
   ss << name << ext;
   std::filesystem::path filepath = directory / ss.str();
-  return write_file(filepath, image_data, create_dirs);
+  return write_binary(filepath, image_data, create_dirs);
 }

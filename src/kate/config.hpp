@@ -25,6 +25,7 @@ namespace kate {
   // size of the display screen
   constexpr std::size_t SCR_W = 64;
   constexpr std::size_t SCR_H = 32;
+  constexpr std::size_t FADERATE = 16;
 
   // location of the first address to execute
   constexpr std::uint16_t entry_point   = 0x0200;
