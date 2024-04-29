@@ -17,6 +17,9 @@ namespace kate {
   // Treat the highest nibble in BNNN as the register address.
   constexpr bool quirk_jump_high_nubble_register = false;
 
+  // Don't increment the index register when loading/storing registers
+  constexpr bool quirk_leave_index_load_store = true;
+
   /****************************************************************************
   / Internal Configuration.                                                   /
   / These values should not be changed unless you know what you're doing.     /

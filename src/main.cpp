@@ -92,6 +92,7 @@ int main(int argc, const char *argv[]) {
       glfwSetWindowShouldClose(window, true);
       break;
     }
+    // std::cout << chip8.debug_line() << std::endl;
 
     // load new pixel data
     auto buffer = chip8.get_output_buffer();

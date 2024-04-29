@@ -25,6 +25,45 @@ kate::invalid_instruction::invalid_instruction(const std::string &msg)
 kate::invalid_instruction::invalid_instruction(const char *msg)
 : interpreter_error(msg) {}
 
+kate::stack_overflow::stack_overflow(const std::string &msg)
+: interpreter_error(msg) {}
+kate::stack_overflow::stack_overflow(const char *msg)
+: interpreter_error(msg) {}
+
+std::string kate::decode_INSTRUCTION(INSTRUCTION inst) {
+  switch (inst) {
+    case CLEAR        : return "CLEAR";
+    case RET          : return "RET";
+    case JMP          : return "JMP";
+    case CALL         : return "CALL";
+    case SKIP_EQ_IMM  : return "SKIP_EQ_IMM";
+    case SKIP_NE_IMM  : return "SKIP_NE_IMM";
+    case SKIP_EQ_REG  : return "SKIP_EQ_REG";
+    case SKIP_NE_REG  : return "SKIP_NE_REG";
+    case MOV          : return "MOV";
+    case ADD          : return "ADD";
+    case ALU          : return "ALU";
+    case LDI          : return "LDI";
+    case JMP_OFF      : return "JMP_OFF";
+    case RANDOM       : return "RANDOM";
+    case DRAW         : return "DRAW";
+    case KEY_EQ       : return "KEY_EQ";
+    case KEY_NE       : return "KEY_NE";
+    case MISC         : return "MISC";
+    default           : return "UNKNOWN INSTRUCTION";
+  }
+}
+
+std::string kate::hex_string(std::size_t i, std::size_t w, bool b) {
+  std::stringstream ss;
+  if (b) {
+    ss << "0x";
+  }
+  ss << std::hex << std::setw(w) << std::setfill('0') << i;
+
+  return ss.str();
+}
+
 /******************************************************************************
 / Interpreter                                                                 /
 ******************************************************************************/
@@ -43,9 +82,10 @@ void kate::Interpreter::reset() {
   sound_timer = 0;
 
   output_buffer.fill(0);
-  current_instruction = 0;
+  cur_inst = {0, NOP, 0, 0, 0};
   cycle_counter = 0;
-
+  ram[0] = 0x00;
+  ram[1] = 0x01;
   std::copy(
     char_data.begin(),
     char_data.end(),
@@ -68,6 +108,38 @@ kate::Interpreter::get_output_buffer() const {
   return output_buffer;
 }
 
+std::string kate::Interpreter::crashdump(const std::string &msg) const {
+  std::stringstream ss;
+  ss << "ABORTING EXECUTION: " << msg << '\n';
+  ss << "------------------------------------------------------------------\n";
+  ss << " current cycle " << hex_string(cycle_counter, 8) << '\n';
+  ss << " current instruction " << hex_string(cur_inst.raw, 4, false);
+  ss << " ( " << decode_INSTRUCTION(cur_inst.inst) << " )\n";
+  ss << "------------------------------------------------------------------\n";
+  ss << " PC : " << hex_string(prev_program_counter, 4) << " . ";
+  ss << " SP : " << hex_string(stack_pointer, 4) << " . ";
+  ss << " IR : " << hex_string(index_register, 4) << '\n';
+  ss << "------------------------------------------------------------------\n";
+  ss << "      STACK  | REGISTERS\n";
+  for (std::size_t i = 0; i <= 0xf; ++i) {
+    ss << hex_string(i, 1) << " : " << hex_string(stack[i], 4) << " | ";
+    ss << hex_string(registers[i], 2) << '\n';
+  }
+  ss << "------------------------------------------------------------------\n";
+
+  return ss.str();
+}
+
+std::string kate::Interpreter::debug_line() const {
+  std::stringstream ss;
+  ss << "PC : " << kate::hex_string(prev_program_counter, 4) << " . ";
+  ss << "inst : ";
+  ss << kate::hex_string(cur_inst.raw, 4, false) << " ( ";
+  ss << decode_INSTRUCTION(cur_inst.inst) << " )";
+
+  return ss.str();
+}
+
 void kate::Interpreter::step() {
   fetch();
   decode();
@@ -78,91 +150,160 @@ void kate::Interpreter::step() {
 
 void kate::Interpreter::fetch() {
   if (program_counter >= 0x4000) {
-    std::stringstream ss;
-    ss << "PC out of range : 0x" ;
-    ss << std::hex << std::setw(4) << std::setfill('0') << program_counter;
-    throw std::out_of_range(ss.str());
+    throw invalid_address(crashdump("PC out of range"));
   }
+  cur_inst = {0, NOP, 0, 0, 0};
+
+  // save address of current instruction for debug purposes
+  prev_program_counter = program_counter;
 
   // fetch next instruction and increment PC
-  current_instruction <<= 8;
-  current_instruction |= ram[program_counter];
+  cur_inst.raw <<= 8;
+  cur_inst.raw |= ram[program_counter];
   ++program_counter;
-  current_instruction <<= 8;
-  current_instruction |= ram[program_counter];
+  cur_inst.raw <<= 8;
+  cur_inst.raw |= ram[program_counter];
   ++program_counter;
 }
 
 void kate::Interpreter::decode() {
-  std::uint8_t first = (current_instruction & 0xf000) >> 12;
-
-  switch (first) {
-    case 0x00: _00E0(); break;
-    case 0x01: _1NNN(); break;
-    case 0x06: _6XNN(); break;
-    case 0x07: _7XNN(); break;
-    case 0x0a: _ANNN(); break;
-    case 0x0d: _DXYN(); break;
-
-    default:
-      std::stringstream ss;
-      ss << "Invalid Instruction : " ;
-      ss << std::hex << std::setw(4) << std::setfill('0');
-      ss << current_instruction;
-
-      throw invalid_instruction(ss.str());
+  std::uint8_t o = (cur_inst.raw & 0xf000) >> 12;
+  switch (o) {
+    case 0x00:
+      cur_inst.inst = static_cast<INSTRUCTION>(cur_inst.raw & 0x00ff);
+      break;
+    case 0x01: case 0x02: case 0x0a: case 0x0b:
+      cur_inst.inst = static_cast<INSTRUCTION>(o);
+      cur_inst.n = cur_inst.raw & 0x0fff;;
+      break;
+    case 0x03: case 0x04: case 0x06: case 0x07: case 0x0c: case 0x0e: case 0x0f:
+      cur_inst.inst = static_cast<INSTRUCTION>(o);
+      cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
+      cur_inst.n = cur_inst.raw & 0x00ff;
+      break;
+    case 0x05: case 0x08: case 0x09: case 0x0d:
+      cur_inst.inst = static_cast<INSTRUCTION>(o);
+      cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
+      cur_inst.y = (cur_inst.raw & 0x00f0) >> 4;
+      cur_inst.n = (cur_inst.raw & 0x000f);
+      break;
   }
 }
 
 void kate::Interpreter::execute() {
   // execute instruction
+  switch (cur_inst.inst) {
+    case CLEAR:
+      output_buffer.fill(0);
+      break;
+    case RET:
+      --stack_pointer;
+      program_counter = stack[stack_pointer];
+      break;
+    case JMP:
+      prev_program_counter = program_counter - 2;
+      program_counter = cur_inst.n;
+      break;
+    case CALL:
+      if (stack_pointer >= 16) {
+        throw stack_overflow(crashdump("STACK OVERFLOW"));
+      }
+      stack[stack_pointer] = program_counter;
+      ++stack_pointer;
+      program_counter = cur_inst.n;
+    case SKIP_EQ_IMM:
+      if (registers[cur_inst.x] == cur_inst.n) {
+        program_counter += 2;
+      }
+      break;
+    case SKIP_NE_IMM:
+      if (registers[cur_inst.x] != cur_inst.n) {
+        program_counter += 2;
+      }
+      break;
+    case SKIP_EQ_REG:
+      if (registers[cur_inst.x] == registers[cur_inst.y]) {
+        program_counter += 2;
+      }
+      break;
+    case SKIP_NE_REG:
+      if (registers[cur_inst.x] != registers[cur_inst.y]) {
+        program_counter += 2;
+      }
+      break;
+    case MOV:
+      registers[cur_inst.x] = cur_inst.n;
+      break;
+    case ADD:
+      registers[cur_inst.x] += cur_inst.n;
+      break;
+    case ALU: _8XYN(); break;
+    case LDI:
+      index_register = cur_inst.n;
+      break;
+    case JMP_OFF:
+      prev_program_counter = program_counter - 2;
+      program_counter = cur_inst.n + registers[0];
+      break;
+    // case RANDOM       : return "RANDOM";
+    case DRAW: _DXYN(); break;
+    // case KEY_EQ       : return "KEY_EQ";
+    // case KEY_NE       : return "KEY_NE";
+    case MISC: _FXNN(); break;
+    default:
+      throw invalid_instruction(crashdump("NOT YET IMPLEMENTED"));
+  }
 }
 
-void kate::Interpreter::_00E0() {
-  // clear the output buffer
-  output_buffer.fill(0);
-}
-
-void kate::Interpreter::_1NNN() {
-  // jump
-  program_counter = current_instruction & 0x0fff;
-}
-
-void kate::Interpreter::_6XNN() {
-  // move
-  std::uint8_t x = (current_instruction & 0x0f00) >> 8;
-  std::uint8_t n = (current_instruction & 0x00ff);
-
-  registers[x] = n;
-}
-
-void kate::Interpreter::_7XNN() {
-  // add
-  std::uint8_t x = (current_instruction & 0x0f00) >> 8;
-  std::uint8_t n = (current_instruction & 0x00ff);
-
-  registers[x] += n;
-}
-
-void kate::Interpreter::_ANNN() {
-  // set index register
-  index_register = current_instruction & 0x0fff;
+void kate::Interpreter::_8XYN() {
+  uint16_t tmp = 0;
+  switch (static_cast<ALU_OP>(cur_inst.n)) {
+    case ALU_OP::MOV:
+      registers[cur_inst.x] = registers[cur_inst.y];
+      break;
+    case ALU_OP::OR:
+      registers[cur_inst.x] |= registers[cur_inst.y];
+      break;
+    case ALU_OP::AND:
+      registers[cur_inst.x] &= registers[cur_inst.y];
+      break;
+    case ALU_OP::XOR:
+      registers[cur_inst.x] ^= registers[cur_inst.y];
+      break;
+    case ALU_OP::ADD:
+      tmp = registers[cur_inst.x] + registers[cur_inst.y];
+      if (tmp > 255) { registers[0xf] = 1; }
+      registers[cur_inst.x] = tmp;
+      break;
+    case ALU_OP::SUB:
+      registers[0xf] = registers[cur_inst.x] > registers[cur_inst.y];
+      registers[cur_inst.x] -= registers[cur_inst.y];
+      break;
+    case ALU_OP::RSUB:
+      registers[0xf] = registers[cur_inst.x] < registers[cur_inst.y];
+      registers[cur_inst.x] = registers[cur_inst.y] - registers[cur_inst.x];
+      break;
+    case ALU_OP::SHL:
+      registers[0xf] = (registers[cur_inst.x] >> 7) & 0b1;
+      registers[cur_inst.x] <<= 1;
+      break;
+    case ALU_OP::SHR:
+      registers[0xf] = registers[cur_inst.x] & 0b1;
+      registers[cur_inst.x] >>= 1;
+      break;
+  }
 }
 
 void kate::Interpreter::_DXYN() {
-  std::uint8_t x = (current_instruction & 0x0f00) >> 8;
-  std::uint8_t y = (current_instruction & 0x00f0) >> 4;
-  std::uint8_t n = (current_instruction & 0x000f);
-
   // offsets wrap, drawing does not
-  std::uint8_t h_offset = registers[x] % SCR_W;
-  std::uint8_t v_offset = registers[y] % SCR_H;
+  std::uint8_t h_offset = registers[cur_inst.x] % SCR_W;
+  std::uint8_t v_offset = registers[cur_inst.y] % SCR_H;
 
   // clear flags register
   registers[0xf] = 0;
 
   // each row in the sprite is 1 byte wide, stored sequentially
-  for (std::size_t i = 0; i < n; ++i) {
+  for (std::size_t i = 0; i < cur_inst.n; ++i) {
     std::uint8_t data = ram[index_register + i];
     std::uint8_t ypos = v_offset + i;
     std::size_t pixel_offset = ypos * SCR_W;
@@ -192,5 +333,49 @@ void kate::Interpreter::_DXYN() {
     if (ypos >= SCR_H) {
       break;
     }
+  }
+}
+
+void kate::Interpreter::_FXNN() {
+  switch (static_cast<MISC_OP>(cur_inst.n)) {
+    // case MISC_OP::GET_DT:
+    //   break;
+    // case MISC_OP::GET_KEY:
+    //   break;
+    // case MISC_OP::SET_DT:
+    //   break;
+    // case MISC_OP::SET_ST:
+    //   break;
+    case MISC_OP::GET_CHAR:
+      index_register = char_pointer + (registers[cur_inst.x & 0xf] * 5);
+      break;
+    case MISC_OP::ADD_IR:
+      index_register += registers[cur_inst.x];
+      break;
+    case MISC_OP::BCD:
+      ram[index_register]     =  registers[cur_inst.x]        / 100;
+      ram[index_register + 1] = (registers[cur_inst.x] % 100) /  10;
+      ram[index_register + 2] =  registers[cur_inst.x] %  10;
+      break;
+    case MISC_OP::STORE_REG:
+      for (std::size_t i = 0; i <= cur_inst.x; ++i) {
+        ram[index_register + i] = registers[i];
+      }
+
+      if (!quirk_leave_index_load_store) {
+        index_register += cur_inst.x;
+      }
+      break;
+    case MISC_OP::LOAD_REG:
+      for (std::size_t i = 0; i <= cur_inst.x; ++i) {
+        registers[i] = ram[index_register + i];
+      }
+
+      if (!quirk_leave_index_load_store) {
+        index_register += cur_inst.x;
+      }
+      break;
+    default:
+      throw invalid_instruction(crashdump("NOT YET IMPLEMENTED"));
   }
 }

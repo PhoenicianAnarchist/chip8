@@ -34,9 +34,60 @@ namespace kate {
     explicit invalid_instruction(const char* msg);
   };
 
-  enum class INSTRUCTION {
-    NOP
+  class stack_overflow : public interpreter_error {
+  public:
+    explicit stack_overflow(const std::string& msg);
+    explicit stack_overflow(const char* msg);
   };
+
+  enum INSTRUCTION {
+    NOP         = 0x00,
+    CLEAR       = 0xe0,
+    RET         = 0xee,
+    JMP         = 0x01,
+    CALL        = 0x02,
+    SKIP_EQ_IMM = 0x03,
+    SKIP_NE_IMM = 0x04,
+    SKIP_EQ_REG = 0x05,
+    SKIP_NE_REG = 0x09,
+    MOV         = 0x06,
+    ADD         = 0x07,
+    ALU         = 0x08,
+    LDI         = 0x0a,
+    JMP_OFF     = 0x0b,
+    RANDOM      = 0x0c,
+    DRAW        = 0x0d,
+    KEY_EQ      = 0x9e,
+    KEY_NE      = 0xa1,
+    MISC        = 0x0f
+  };
+
+  enum class ALU_OP {
+    MOV   = 0x00,
+    OR    = 0x01,
+    AND   = 0x02,
+    XOR   = 0x03,
+    ADD   = 0x04,
+    SUB   = 0x05,
+    RSUB  = 0x07,
+    SHR   = 0x06,
+    SHL   = 0x0e
+  };
+
+  enum class MISC_OP {
+    GET_DT    = 0x07,
+    GET_KEY   = 0x0A,
+    SET_DT    = 0x15,
+    SET_ST    = 0x18,
+    GET_CHAR  = 0x29,
+    ADD_IR    = 0x1E,
+    BCD       = 0x33,
+    STORE_REG = 0x55,
+    LOAD_REG  = 0x65
+  };
+
+  std::string decode_INSTRUCTION(INSTRUCTION inst);
+  std::string hex_string(std::size_t i, std::size_t w, bool b=true);
 
   // will be able to hold data for any kind of instruction
   struct Instruction {
@@ -55,18 +106,18 @@ namespace kate {
     void reset();
     void load_rom(const std::vector<std::uint8_t> &rom);
     const std::array<std::uint8_t, SCR_W * SCR_H> &get_output_buffer() const;
+    std::string crashdump(const std::string &msg) const;
+    std::string debug_line() const;
+
     void step();
 
     void fetch();
     void decode();
     void execute();
 
-    void _00E0();
-    void _1NNN();
-    void _6XNN();
-    void _7XNN();
-    void _ANNN();
+    void _8XYN();
     void _DXYN();
+    void _FXNN();
 
   private:
     std::array<std::uint8_t, 0x4000> ram;
@@ -81,8 +132,9 @@ namespace kate {
     // each pixel is stored as a whole byte.
     // this is inneficcient but inconsequential.
     std::array<std::uint8_t, SCR_W * SCR_H> output_buffer;
-    std::uint16_t current_instruction;
+    Instruction cur_inst;
     std::uint64_t cycle_counter;
+    std::uint16_t prev_program_counter;
   };
 }
 
