@@ -8,7 +8,6 @@ namespace kate {
   // This value controls how fast the interpreter runs. Some programs may need
   // this to be altered to run at the proper speed.
   constexpr std::size_t instructions_per_second = 700;
-  constexpr std::size_t display_refresh_rate = 60;
 
   /****************************************************************************
   / Some implementations differ in behaviour for various reasons, these flags /
@@ -30,6 +29,7 @@ namespace kate {
   constexpr std::size_t SCR_W = 64;
   constexpr std::size_t SCR_H = 32;
   constexpr std::size_t FADERATE = 16;
+  constexpr std::size_t display_refresh_rate = 60;
 
   // location of the first address to execute
   constexpr std::uint16_t entry_point   = 0x0200;

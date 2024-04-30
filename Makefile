@@ -1,6 +1,6 @@
 SOURCES=$(wildcard src/*.cpp) $(wildcard src/*/*.cpp)
 OBJECTS=$(patsubst src/%,build/%,${SOURCES:.cpp=.o})
-DIRS=$(dir ${OBJECTS})
+DIRS=$(sort $(dir ${OBJECTS}))
 
 CXX_FLAGS=
 LD_FLAGS=-lGL -lglfw -lglad

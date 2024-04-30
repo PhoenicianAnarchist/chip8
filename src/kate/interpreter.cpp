@@ -88,6 +88,7 @@ void kate::Interpreter::reset() {
 
   output_buffer.resize(SCR_W * SCR_H);
   std::fill(output_buffer.begin(), output_buffer.end(), 0);
+  is_blocking = false;
   cur_inst = {0, NOP, 0, 0, 0};
   cycle_counter = 0;
   last_key_event = {0, KEY_EVENT::NONE};
@@ -405,10 +406,16 @@ void kate::Interpreter::_FXNN() {
       break;
     case MISC_OP::GET_KEY:
       // if last key_event is not a release, soft-block
+      if (!is_blocking) {
+        last_key_event = {0, KEY_EVENT::NONE};
+        is_blocking = true;
+      }
+
       if (last_key_event.second != KEY_EVENT::RELEASE) {
         program_counter -= 2;
       } else {
         registers[cur_inst.x] = last_key_event.first;
+        is_blocking = false;
         last_key_event = {0, KEY_EVENT::NONE};
       }
       break;

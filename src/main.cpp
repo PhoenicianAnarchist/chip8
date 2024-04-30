@@ -112,43 +112,12 @@ int main(int argc, const char *argv[]) {
   );
 
   std::vector<std::uint8_t> rom = utils::read_binary(options.rom_path);
-  // std::vector<std::uint8_t> rom = {
-  //   0x60, 0x01,  // v0 = 1
-  //   0x61, 0x01,  // v1 = 1
-  //   0x00, 0xe0,  // clear
-  //   0x64, 0x00,  // v4 = 0
-  //   0xf4, 0x0a,  // get_key v4
-  //   0xf4, 0x29,  // char v4
-  //   0xd0, 0x15,  // draw v0 v1 5
-  //   0x12, 0x04   // jump 0x0204
-  // };
 
-  // std::vector<std::uint8_t> rom = {
-  //   0x60, 0x01, // v0 = 1
-  //   0x61, 0x01, // v1 = 1
-  //   0x63, 0x05, // v3 = 5
-  //   0x64, 0x00, // v4 = 0
-  //   0x65, 0x01, // v5 = 1
-  //   0x00, 0xe0, // clear
-  //   0xf5, 0x29, // char v5
-  //   0xe3, 0x9e, // if keys[v3]
-  //   0xf4, 0x29, // char v4
-  //   0xd0, 0x15, // draw v0 v1 5
-  //   0x12, 0x0a  // jump 0x020a
-  // };
-  // std::vector<std::uint8_t> rom = {
-  //   0x60, 0x01, // v0 = 1
-  //   0x61, 0x01, // v1 = 1
-  //   0x63, 0x05, // v3 = 5
-  //   0x64, 0x00, // v4 = 0
-  //   0x65, 0x01, // v5 = 1
-  //   0x00, 0xe0, // clear
-  //   0xf4, 0x29, // char v4
-  //   0xe3, 0xa1, // if keys[v3]
-  //   0xf5, 0x29, // char v5
-  //   0xd0, 0x15, // draw v0 v1 5
-  //   0x12, 0x0a  // jump 0x020a
-  // };
+  for (std::uint8_t i = 0; i <= 0xf; ++i) {
+    openglwrapper::key_states[key_map[i]].is_pressed = false;
+    openglwrapper::key_states[key_map[i]].is_released = false;
+    openglwrapper::key_states[key_map[i]].is_handled = true;
+  }
 
   kate::Interpreter chip8 {};
   chip8.load_rom(rom);
@@ -164,10 +133,17 @@ int main(int argc, const char *argv[]) {
   utils::seconds render_accumulator {0.0};
 
   glClearColor(0.1, 0.1, 0.1, 1.0);
+  glfwPollEvents();
+  processInput(window, openglwrapper::key_states, chip8);
   while (!glfwWindowShouldClose(window)) {
     timer_begin = clock.get();
 
     if (system_accumulator >= system_timestep) {
+      if (system_accumulator >= (system_timestep * 2)) {
+        std::cout << "WARNING: system loop running slow! ";
+        std::cout << system_accumulator.count() << std::endl;
+      }
+
       glfwPollEvents();
       processInput(window, openglwrapper::key_states, chip8);
 
@@ -182,6 +158,11 @@ int main(int argc, const char *argv[]) {
     }
 
     if (render_accumulator >= render_timestep) {
+      if (render_accumulator >= (render_timestep * 2)) {
+        std::cout << "WARNING: render loop running slow! ";
+        std::cout << system_accumulator.count() << std::endl;
+      }
+
       chip8.decrement_timers();
 
       glClear(GL_COLOR_BUFFER_BIT);

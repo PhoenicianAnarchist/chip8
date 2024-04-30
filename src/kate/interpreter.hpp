@@ -149,6 +149,7 @@ namespace kate {
     // each pixel is stored as a whole byte.
     // this is inneficcient but inconsequential.
     std::vector<std::uint8_t> output_buffer;
+    bool is_blocking;
     Instruction cur_inst;
     std::uint64_t cycle_counter;
     std::uint16_t prev_program_counter;
