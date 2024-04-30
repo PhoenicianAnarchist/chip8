@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <map>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -8,9 +9,11 @@
 #include "debug/glfw_debug.hpp"
 #include "kate/interpreter.hpp"
 #include "opengl/exceptions.hpp"
+#include "opengl/input.hpp"
 #include "opengl/mesh.hpp"
 #include "opengl/shader.hpp"
 #include "opengl/texture.hpp"
+#include "util/image.hpp"
 #include "util/io.hpp"
 #include "util/options.hpp"
 
@@ -22,7 +25,31 @@ GLFWwindow *init_opengl(
   int window_width, int window_height, const char window_title[]
 );
 
-void processInput(GLFWwindow *window);
+void processInput(
+  GLFWwindow *window, std::map<int, openglwrapper::KeyState> &key_states,
+  kate::Interpreter &interpreter
+);
+
+// TODO: allow rebinding at runtime, and store user preferences.
+// <internal number, GLFW name>
+std::map<int, int> key_map = {
+  {0x00, GLFW_KEY_X},
+  {0x01, GLFW_KEY_1},
+  {0x02, GLFW_KEY_2},
+  {0x03, GLFW_KEY_3},
+  {0x04, GLFW_KEY_Q},
+  {0x05, GLFW_KEY_W},
+  {0x06, GLFW_KEY_E},
+  {0x07, GLFW_KEY_A},
+  {0x08, GLFW_KEY_S},
+  {0x09, GLFW_KEY_D},
+  {0x0a, GLFW_KEY_Z},
+  {0x0b, GLFW_KEY_C},
+  {0x0c, GLFW_KEY_4},
+  {0x0d, GLFW_KEY_R},
+  {0x0e, GLFW_KEY_F},
+  {0x0f, GLFW_KEY_V}
+};
 
 int main(int argc, const char *argv[]) {
   utils::OPTIONS options = utils::parse_command_line(argc, argv);
@@ -34,6 +61,7 @@ int main(int argc, const char *argv[]) {
   }
 
   GLFWwindow *window = init_opengl(window_width, window_height, window_title);
+  glfwSetKeyCallback(window, openglwrapper::key_callback);
 
   if (window == nullptr) {
     return 1;
@@ -81,7 +109,7 @@ int main(int argc, const char *argv[]) {
   glClearColor(0.1, 0.1, 0.1, 1.0);
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    processInput(window);
+    processInput(window, openglwrapper::key_states, chip8);
 
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -93,6 +121,8 @@ int main(int argc, const char *argv[]) {
       break;
     }
     // std::cout << chip8.debug_line() << std::endl;
+
+    chip8.decrement_timers();
 
     // load new pixel data
     auto buffer = chip8.get_output_buffer();
@@ -121,7 +151,7 @@ int main(int argc, const char *argv[]) {
         std::size_t index = x + offset;
 
         // decrement value in display_texture to simulate fading
-        if (display_buffer[index] > 0) {
+        if (display_buffer[index] >= kate::FADERATE) {
           display_buffer[index] -= kate::FADERATE;
         }
 
@@ -183,8 +213,37 @@ GLFWwindow *init_opengl(
   return window;
 }
 
-void processInput(GLFWwindow *window) {
-  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+void processInput(
+  GLFWwindow *window, std::map<int, openglwrapper::KeyState> &key_states,
+  kate::Interpreter &interpreter
+) {
+  if (key_states[GLFW_KEY_ESCAPE].is_pressed) {
     glfwSetWindowShouldClose(window, true);
+  }
+
+  if (key_states[GLFW_KEY_P].is_pressed && !key_states[GLFW_KEY_P].is_handled) {
+    std::filesystem::path directory = "output";
+    std::string fn = interpreter.debug_filename();
+
+    utils::save_pnm(
+      interpreter.get_output_buffer(), kate::SCR_W, kate::SCR_H,
+      directory, fn, utils::PGM_RAW, true, "1"
+    );
+
+    std::cout << "Saved file " << fn << " to " << directory << std::endl;
+
+    key_states[GLFW_KEY_P].is_handled = true;
+  }
+
+  for (int k = 0; k <= 0xf; ++k) {
+    if (!key_states[key_map[k]].is_handled) {
+      if (key_states[key_map[k]].is_pressed) {
+        interpreter.keypress(k);
+      } else if (key_states[key_map[k]].is_released) {
+        interpreter.keyrelease(k);
+      }
+
+      key_states[key_map[k]].is_handled = true;
+    }
   }
 }

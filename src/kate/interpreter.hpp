@@ -3,6 +3,7 @@
 
 #include <array>
 #include <exception>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -86,6 +87,12 @@ namespace kate {
     LOAD_REG  = 0x65
   };
 
+  enum class KEY_EVENT {
+    NONE,
+    PRESS,
+    RELEASE
+  };
+
   std::string decode_INSTRUCTION(INSTRUCTION inst);
   std::string hex_string(std::size_t i, std::size_t w, bool b=true);
 
@@ -105,9 +112,15 @@ namespace kate {
 
     void reset();
     void load_rom(const std::vector<std::uint8_t> &rom);
-    const std::array<std::uint8_t, SCR_W * SCR_H> &get_output_buffer() const;
+    const std::vector<std::uint8_t> &get_output_buffer() const;
     std::string crashdump(const std::string &msg) const;
     std::string debug_line() const;
+    std::string debug_filename() const;
+
+    void decrement_timers();
+    void keypress(std::uint8_t k);
+    void keyrelease(std::uint8_t k);
+    std::uint8_t random_uint8();
 
     void step();
 
@@ -120,8 +133,12 @@ namespace kate {
     void _FXNN();
 
   private:
+    std::default_random_engine e;
+    std::uniform_int_distribution<int> dist;
+
     std::array<std::uint8_t, 0x4000> ram;
     std::array<std::uint8_t, 16> registers;
+    std::array<std::uint8_t, 16> key_states;
     std::array<std::uint16_t, 16> stack;
     std::uint16_t program_counter;
     std::uint16_t stack_pointer;
@@ -131,10 +148,11 @@ namespace kate {
 
     // each pixel is stored as a whole byte.
     // this is inneficcient but inconsequential.
-    std::array<std::uint8_t, SCR_W * SCR_H> output_buffer;
+    std::vector<std::uint8_t> output_buffer;
     Instruction cur_inst;
     std::uint64_t cycle_counter;
     std::uint16_t prev_program_counter;
+    std::pair<int, KEY_EVENT> last_key_event;
   };
 }
 
