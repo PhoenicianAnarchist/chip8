@@ -78,6 +78,7 @@ kate::Interpreter::Interpreter() {
 void kate::Interpreter::reset() {
   ram.fill(0);
   registers.fill(0);
+  key_states.fill(0);
   stack.fill(0);
   program_counter = entry_point;
   stack_pointer = 0;
@@ -209,6 +210,7 @@ void kate::Interpreter::decode() {
   switch (o) {
     case 0x00: case 0x0e:
       cur_inst.inst = static_cast<INSTRUCTION>(cur_inst.raw & 0x00ff);
+      cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
       break;
     case 0x01: case 0x02: case 0x0a: case 0x0b:
       cur_inst.inst = static_cast<INSTRUCTION>(o);
@@ -230,6 +232,8 @@ void kate::Interpreter::decode() {
 
 void kate::Interpreter::execute() {
   // execute instruction
+    std::uint8_t r = cur_inst.x;
+    std::uint8_t k = registers[cur_inst.x];
   switch (cur_inst.inst) {
     case CLEAR:
       std::fill(output_buffer.begin(), output_buffer.end(), 0);
@@ -313,12 +317,15 @@ void kate::Interpreter::_8XYN() {
       break;
     case ALU_OP::OR:
       registers[cur_inst.x] |= registers[cur_inst.y];
+      registers[0xf] = 0;
       break;
     case ALU_OP::AND:
       registers[cur_inst.x] &= registers[cur_inst.y];
+      registers[0xf] = 0;
       break;
     case ALU_OP::XOR:
       registers[cur_inst.x] ^= registers[cur_inst.y];
+      registers[0xf] = 0;
       break;
     case ALU_OP::ADD:
       tmp = registers[cur_inst.x];
@@ -402,6 +409,7 @@ void kate::Interpreter::_FXNN() {
         program_counter -= 2;
       } else {
         registers[cur_inst.x] = last_key_event.first;
+        last_key_event = {0, KEY_EVENT::NONE};
       }
       break;
     case MISC_OP::SET_DT:

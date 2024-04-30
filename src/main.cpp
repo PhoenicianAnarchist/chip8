@@ -16,6 +16,7 @@
 #include "util/image.hpp"
 #include "util/io.hpp"
 #include "util/options.hpp"
+#include "util/timer.hpp"
 
 constexpr int window_width = 640;
 constexpr int window_height = 320;
@@ -28,6 +29,14 @@ GLFWwindow *init_opengl(
 void processInput(
   GLFWwindow *window, std::map<int, openglwrapper::KeyState> &key_states,
   kate::Interpreter &interpreter
+);
+
+void render_console(const std::vector<std::uint8_t> &buffer);
+void render_opengl(
+  const std::vector<std::uint8_t> &buffer,
+  GLFWwindow *window, std::vector<std::uint8_t> &display_buffer,
+  openglwrapper::Mesh &simple_mesh, openglwrapper::Shader &main_shader,
+  openglwrapper::Texture &display_texture
 );
 
 // TODO: allow rebinding at runtime, and store user preferences.
@@ -103,72 +112,92 @@ int main(int argc, const char *argv[]) {
   );
 
   std::vector<std::uint8_t> rom = utils::read_binary(options.rom_path);
+  // std::vector<std::uint8_t> rom = {
+  //   0x60, 0x01,  // v0 = 1
+  //   0x61, 0x01,  // v1 = 1
+  //   0x00, 0xe0,  // clear
+  //   0x64, 0x00,  // v4 = 0
+  //   0xf4, 0x0a,  // get_key v4
+  //   0xf4, 0x29,  // char v4
+  //   0xd0, 0x15,  // draw v0 v1 5
+  //   0x12, 0x04   // jump 0x0204
+  // };
+
+  // std::vector<std::uint8_t> rom = {
+  //   0x60, 0x01, // v0 = 1
+  //   0x61, 0x01, // v1 = 1
+  //   0x63, 0x05, // v3 = 5
+  //   0x64, 0x00, // v4 = 0
+  //   0x65, 0x01, // v5 = 1
+  //   0x00, 0xe0, // clear
+  //   0xf5, 0x29, // char v5
+  //   0xe3, 0x9e, // if keys[v3]
+  //   0xf4, 0x29, // char v4
+  //   0xd0, 0x15, // draw v0 v1 5
+  //   0x12, 0x0a  // jump 0x020a
+  // };
+  // std::vector<std::uint8_t> rom = {
+  //   0x60, 0x01, // v0 = 1
+  //   0x61, 0x01, // v1 = 1
+  //   0x63, 0x05, // v3 = 5
+  //   0x64, 0x00, // v4 = 0
+  //   0x65, 0x01, // v5 = 1
+  //   0x00, 0xe0, // clear
+  //   0xf4, 0x29, // char v4
+  //   0xe3, 0xa1, // if keys[v3]
+  //   0xf5, 0x29, // char v5
+  //   0xd0, 0x15, // draw v0 v1 5
+  //   0x12, 0x0a  // jump 0x020a
+  // };
+
   kate::Interpreter chip8 {};
   chip8.load_rom(rom);
 
+  utils::Clock clock;
+  utils::seconds timer_begin {0.0};
+  utils::seconds timer_end {0.0};
+
+  utils::seconds system_timestep {1.0 / kate::instructions_per_second};
+  utils::seconds system_accumulator {0.0};
+
+  utils::seconds render_timestep {1.0 / kate::display_refresh_rate};
+  utils::seconds render_accumulator {0.0};
+
   glClearColor(0.1, 0.1, 0.1, 1.0);
   while (!glfwWindowShouldClose(window)) {
-    glfwPollEvents();
-    processInput(window, openglwrapper::key_states, chip8);
+    timer_begin = clock.get();
 
-    glClear(GL_COLOR_BUFFER_BIT);
+    if (system_accumulator >= system_timestep) {
+      glfwPollEvents();
+      processInput(window, openglwrapper::key_states, chip8);
 
-    try {
-      chip8.step();
-    } catch (kate::interpreter_error &e) {
-      std::cerr << e.what() << std::endl;
-      glfwSetWindowShouldClose(window, true);
-      break;
-    }
-    // std::cout << chip8.debug_line() << std::endl;
-
-    chip8.decrement_timers();
-
-    // load new pixel data
-    auto buffer = chip8.get_output_buffer();
-
-    // {
-    //   // dump buffer to console for debugging
-    //   for (std::size_t i = 0; i < kate::SCR_W;  ++i) {
-    //     std::cout << '-';
-    //   }
-    //
-    //   std::cout << std::endl;
-    //   for (std::size_t y = 0; y < kate::SCR_H; ++y) {
-    //     std::size_t offset = y * kate::SCR_W;
-    //     for (std::size_t x = 0; x < kate::SCR_W; ++x) {
-    //       std::size_t index = x + offset;
-    //
-    //       std::cout << (buffer[index] ? '#' : ' ');
-    //     }
-    //     std::cout << '\n';
-    //   }
-    // }
-
-    for (std::size_t y = 0; y < kate::SCR_H; ++y) {
-      std::size_t offset = y * kate::SCR_W;
-      for (std::size_t x = 0; x < kate::SCR_W; ++x) {
-        std::size_t index = x + offset;
-
-        // decrement value in display_texture to simulate fading
-        if (display_buffer[index] >= kate::FADERATE) {
-          display_buffer[index] -= kate::FADERATE;
-        }
-
-        // set new pixels at max brightness
-        if (buffer[index] == 1) {
-          display_buffer[index] = 255;
-        }
+      try {
+        chip8.step();
+      } catch (kate::interpreter_error &e) {
+        std::cerr << e.what() << std::endl;
+        glfwSetWindowShouldClose(window, true);
+        break;
       }
+      system_accumulator -= system_timestep;
     }
-    // update display texture
-    display_texture.update(display_buffer, kate::SCR_W, kate::SCR_H);
 
-    main_shader.use();
-    display_texture.bind();
-    simple_mesh.draw();
+    if (render_accumulator >= render_timestep) {
+      chip8.decrement_timers();
 
-    glfwSwapBuffers(window);
+      glClear(GL_COLOR_BUFFER_BIT);
+
+      const std::vector<std::uint8_t> &buffer = chip8.get_output_buffer();
+      render_opengl(
+        buffer, window, display_buffer,
+        simple_mesh, main_shader,display_texture
+      );
+
+      render_accumulator -= render_timestep;
+    }
+
+    timer_end = clock.get();
+    system_accumulator += (timer_end - timer_begin);
+    render_accumulator += (timer_end - timer_begin);
   }
 
   glfwTerminate();
@@ -246,4 +275,54 @@ void processInput(
       key_states[key_map[k]].is_handled = true;
     }
   }
+}
+
+void render_console(const std::vector<std::uint8_t> &buffer) {
+  // dump buffer to console for debugging
+  for (std::size_t i = 0; i < kate::SCR_W;  ++i) {
+    std::cout << '-';
+  }
+
+  std::cout << std::endl;
+  for (std::size_t y = 0; y < kate::SCR_H; ++y) {
+    std::size_t offset = y * kate::SCR_W;
+    for (std::size_t x = 0; x < kate::SCR_W; ++x) {
+      std::size_t index = x + offset;
+
+      std::cout << (buffer[index] ? '#' : ' ');
+    }
+    std::cout << '\n';
+  }
+}
+
+void render_opengl(
+  const std::vector<std::uint8_t> &buffer,
+  GLFWwindow *window, std::vector<std::uint8_t> &display_buffer,
+  openglwrapper::Mesh &simple_mesh, openglwrapper::Shader &main_shader,
+  openglwrapper::Texture &display_texture
+) {
+  for (std::size_t y = 0; y < kate::SCR_H; ++y) {
+    std::size_t offset = y * kate::SCR_W;
+    for (std::size_t x = 0; x < kate::SCR_W; ++x) {
+      std::size_t index = x + offset;
+
+      // decrement value in display_texture to simulate fading
+      if (display_buffer[index] >= kate::FADERATE) {
+        display_buffer[index] -= kate::FADERATE;
+      }
+
+      // set new pixels at max brightness
+      if (buffer[index] == 1) {
+        display_buffer[index] = 255;
+      }
+    }
+  }
+  // update display texture
+  display_texture.update(display_buffer, kate::SCR_W, kate::SCR_H);
+
+  main_shader.use();
+  display_texture.bind();
+  simple_mesh.draw();
+
+  glfwSwapBuffers(window);
 }
