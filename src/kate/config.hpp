@@ -14,11 +14,23 @@ namespace kate {
   / will enable/disable "quirks".                                             /
   ****************************************************************************/
 
-  // Treat the highest nibble in BNNN as the register address.
-  constexpr bool quirk_jump_high_nubble_register = false;
+  // 8XY1, 8XY2, and 8XY3 reset the flags register to zero
+  constexpr bool quirks_enable_flags_reset = true;
 
-  // Don't increment the index register when loading/storing registers
-  constexpr bool quirk_leave_index_load_store = true;
+  // FX55 and FX65 increment the index register
+  constexpr bool quirks_increment_index_register = true;
+
+  // Sprite drawing waits for the vblank interupt
+  constexpr bool quirks_vblank_wait = true;
+
+  // Sprite coordinates wrap, but sprites are clipped
+  constexpr bool quirks_sprite_clipping = true;
+
+  // 8XY6 and 8XYE ignore the Y register and shift X instead
+  constexpr bool quirks_shifting_ignores_y = false;
+
+  // Treat the highest nibble in BNNN as the register address
+  constexpr bool quirks_jump_high_nubble_as_register = false;
 
   /****************************************************************************
   / Internal Configuration.                                                   /

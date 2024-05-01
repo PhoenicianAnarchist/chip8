@@ -213,8 +213,13 @@ void kate::Interpreter::decode() {
       cur_inst.inst = static_cast<INSTRUCTION>(cur_inst.raw & 0x00ff);
       cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
       break;
-    case 0x01: case 0x02: case 0x0a: case 0x0b:
+    case 0x01: case 0x02: case 0x0a:
       cur_inst.inst = static_cast<INSTRUCTION>(o);
+      cur_inst.n = cur_inst.raw & 0x0fff;;
+      break;
+    case 0x0b:
+      cur_inst.inst = static_cast<INSTRUCTION>(o);
+      cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
       cur_inst.n = cur_inst.raw & 0x0fff;;
       break;
     case 0x03: case 0x04: case 0x06: case 0x07: case 0x0c: case 0x0f:
@@ -286,7 +291,11 @@ void kate::Interpreter::execute() {
       break;
     case JMP_OFF:
       prev_program_counter = program_counter - 2;
-      program_counter = cur_inst.n + registers[0];
+      if (quirks_jump_high_nubble_as_register) {
+        program_counter = cur_inst.n + registers[cur_inst.x];
+      } else {
+        program_counter = cur_inst.n + registers[0];
+      }
       break;
     case RANDOM:
       registers[cur_inst.x] = random_uint8() & cur_inst.n;
@@ -318,15 +327,21 @@ void kate::Interpreter::_8XYN() {
       break;
     case ALU_OP::OR:
       registers[cur_inst.x] |= registers[cur_inst.y];
-      registers[0xf] = 0;
+      if (kate::quirks_enable_flags_reset) {
+        registers[0xf] = 0;
+      }
       break;
     case ALU_OP::AND:
       registers[cur_inst.x] &= registers[cur_inst.y];
-      registers[0xf] = 0;
+      if (kate::quirks_enable_flags_reset) {
+        registers[0xf] = 0;
+      }
       break;
     case ALU_OP::XOR:
       registers[cur_inst.x] ^= registers[cur_inst.y];
-      registers[0xf] = 0;
+      if (kate::quirks_enable_flags_reset) {
+        registers[0xf] = 0;
+      }
       break;
     case ALU_OP::ADD:
       tmp = registers[cur_inst.x];
@@ -345,11 +360,17 @@ void kate::Interpreter::_8XYN() {
       registers[0xf] = tmp <= registers[cur_inst.y];
       break;
     case ALU_OP::SHL:
+      if (!quirks_shifting_ignores_y) {
+        registers[cur_inst.x] = registers[cur_inst.y];
+      }
       tmp = (registers[cur_inst.x] >> 7) & 0b1;
       registers[cur_inst.x] <<= 1;
       registers[0xf] = tmp;
       break;
     case ALU_OP::SHR:
+      if (!quirks_shifting_ignores_y) {
+        registers[cur_inst.x] = registers[cur_inst.y];
+      }
       tmp = registers[cur_inst.x] & 0b1;
       registers[cur_inst.x] >>= 1;
       registers[0xf] = tmp;
@@ -358,9 +379,17 @@ void kate::Interpreter::_8XYN() {
 }
 
 void kate::Interpreter::_DXYN() {
+  // TODO: enable support for vblank timing
+  // quirks_vblank_wait
+
   // offsets wrap, drawing does not
-  std::uint8_t h_offset = registers[cur_inst.x] % SCR_W;
-  std::uint8_t v_offset = registers[cur_inst.y] % SCR_H;
+  std::uint8_t h_offset = registers[cur_inst.x];
+  std::uint8_t v_offset = registers[cur_inst.y];
+
+  if (quirks_sprite_clipping) {
+    h_offset %= SCR_W;
+    v_offset %= SCR_H;
+  }
 
   // clear flags register
   registers[0xf] = 0;
@@ -369,11 +398,17 @@ void kate::Interpreter::_DXYN() {
   for (std::size_t i = 0; i < cur_inst.n; ++i) {
     std::uint8_t data = ram[index_register + i];
     std::uint8_t ypos = v_offset + i;
+    if (!quirks_sprite_clipping) {
+      ypos %= SCR_H;
+    }
     std::size_t pixel_offset = ypos * SCR_W;
 
     // loop over pixels
     for (int p = 7; p >= 0; --p) {
       std::uint8_t xpos = h_offset + (7 - p);
+      if (!quirks_sprite_clipping) {
+        xpos %= SCR_W;
+      }
       std::size_t pixel_index = xpos + pixel_offset;
 
       bool pixel = (data >> p) & 1;
@@ -387,13 +422,13 @@ void kate::Interpreter::_DXYN() {
       output_buffer[pixel_index] ^= pixel;
 
       // skip to next line if edge of screen reached
-      if (xpos >= SCR_W) {
+      if (quirks_sprite_clipping && (xpos >= SCR_W)) {
         break;
       }
     }
 
     // stop drawing if off bottom of screen
-    if (ypos >= SCR_H) {
+    if (quirks_sprite_clipping && (ypos >= SCR_H)) {
       break;
     }
   }
@@ -441,8 +476,10 @@ void kate::Interpreter::_FXNN() {
         ram[index_register + i] = registers[i];
       }
 
-      if (!quirk_leave_index_load_store) {
-        index_register += cur_inst.x;
+      if (quirks_increment_index_register) {
+        // Note: the index register points to the address _after_ the
+        // last value written (write + increment for each register)
+        index_register += cur_inst.x + 1;
       }
       break;
     case MISC_OP::LOAD_REG:
@@ -450,8 +487,10 @@ void kate::Interpreter::_FXNN() {
         registers[i] = ram[index_register + i];
       }
 
-      if (!quirk_leave_index_load_store) {
-        index_register += cur_inst.x;
+      if (quirks_increment_index_register) {
+        // Note: the index register points to the address _after_ the
+        // last value written (write + increment for each register)
+        index_register += cur_inst.x + 1;
       }
       break;
     default:
