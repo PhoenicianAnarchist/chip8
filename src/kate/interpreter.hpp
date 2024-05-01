@@ -123,6 +123,7 @@ namespace kate {
     std::uint8_t random_uint8();
 
     void step();
+    void vblank_trigger();
 
     void fetch();
     void decode();
@@ -150,6 +151,7 @@ namespace kate {
     // this is inneficcient but inconsequential.
     std::vector<std::uint8_t> output_buffer;
     bool is_blocking;
+    bool is_vblank;
     Instruction cur_inst;
     std::uint64_t cycle_counter;
     std::uint16_t prev_program_counter;

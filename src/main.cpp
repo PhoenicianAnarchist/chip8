@@ -162,7 +162,7 @@ int main(int argc, const char *argv[]) {
         std::cout << "WARNING: render loop running slow! ";
         std::cout << system_accumulator.count() << std::endl;
       }
-
+      chip8.vblank_trigger();
       chip8.decrement_timers();
 
       glClear(GL_COLOR_BUFFER_BIT);

@@ -89,6 +89,7 @@ void kate::Interpreter::reset() {
   output_buffer.resize(SCR_W * SCR_H);
   std::fill(output_buffer.begin(), output_buffer.end(), 0);
   is_blocking = false;
+  is_vblank = false;
   cur_inst = {0, NOP, 0, 0, 0};
   cycle_counter = 0;
   last_key_event = {0, KEY_EVENT::NONE};
@@ -186,6 +187,10 @@ void kate::Interpreter::step() {
   execute();
 
   ++cycle_counter;
+}
+
+void kate::Interpreter::vblank_trigger() {
+  is_vblank = true;
 }
 
 void kate::Interpreter::fetch() {
@@ -379,8 +384,11 @@ void kate::Interpreter::_8XYN() {
 }
 
 void kate::Interpreter::_DXYN() {
-  // TODO: enable support for vblank timing
-  // quirks_vblank_wait
+  if (quirks_vblank_wait && !is_vblank) {
+    // soft-block
+    program_counter = prev_program_counter;
+    return;
+  }
 
   // offsets wrap, drawing does not
   std::uint8_t h_offset = registers[cur_inst.x];
@@ -432,6 +440,7 @@ void kate::Interpreter::_DXYN() {
       break;
     }
   }
+  is_vblank = false;
 }
 
 void kate::Interpreter::_FXNN() {
