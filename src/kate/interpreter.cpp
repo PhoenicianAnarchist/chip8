@@ -69,11 +69,16 @@ std::string kate::hex_string(std::size_t i, std::size_t w, bool b) {
 ******************************************************************************/
 kate::Interpreter::Interpreter() {
   reset();
+
+  std::random_device rd;
+  e.seed(rd());
+  dist = std::uniform_int_distribution<int>(0x00, 0xff);
 }
 
 void kate::Interpreter::reset() {
   ram.fill(0);
   registers.fill(0);
+  key_states.fill(0);
   stack.fill(0);
   program_counter = entry_point;
   stack_pointer = 0;
@@ -81,11 +86,14 @@ void kate::Interpreter::reset() {
   delay_timer = 0;
   sound_timer = 0;
 
-  output_buffer.fill(0);
+  output_buffer.resize(SCR_W * SCR_H);
+  std::fill(output_buffer.begin(), output_buffer.end(), 0);
+  is_blocking = false;
+  is_vblank = false;
   cur_inst = {0, NOP, 0, 0, 0};
   cycle_counter = 0;
-  ram[0] = 0x00;
-  ram[1] = 0x01;
+  last_key_event = {0, KEY_EVENT::NONE};
+
   std::copy(
     char_data.begin(),
     char_data.end(),
@@ -103,8 +111,7 @@ void kate::Interpreter::load_rom(const std::vector<std::uint8_t> &rom) {
   );
 }
 
-const std::array<std::uint8_t, kate::SCR_W * kate::SCR_H> &
-kate::Interpreter::get_output_buffer() const {
+const std::vector<std::uint8_t> &kate::Interpreter::get_output_buffer() const {
   return output_buffer;
 }
 
@@ -140,12 +147,50 @@ std::string kate::Interpreter::debug_line() const {
   return ss.str();
 }
 
+std::string kate::Interpreter::debug_filename() const {
+  std::stringstream ss;
+  ss << kate::hex_string(cycle_counter, 8, false) << "_";
+  ss << kate::hex_string(prev_program_counter, 4, false) << "_";
+  ss << kate::hex_string(cur_inst.raw, 4, false);
+
+  return ss.str();
+}
+
+
+void kate::Interpreter::decrement_timers() {
+  if (delay_timer > 0) {
+    --delay_timer;
+  }
+  if (sound_timer > 0) {
+    --sound_timer;
+  }
+}
+
+void kate::Interpreter::keypress(std::uint8_t k) {
+  key_states[k] = true;
+  last_key_event = {k, KEY_EVENT::PRESS};
+}
+
+void kate::Interpreter::keyrelease(std::uint8_t k) {
+  key_states[k] = false;
+  last_key_event = {k, KEY_EVENT::RELEASE};
+}
+
+
+std::uint8_t kate::Interpreter::random_uint8() {
+  return dist(e);
+}
+
 void kate::Interpreter::step() {
   fetch();
   decode();
   execute();
 
   ++cycle_counter;
+}
+
+void kate::Interpreter::vblank_trigger() {
+  is_vblank = true;
 }
 
 void kate::Interpreter::fetch() {
@@ -169,14 +214,20 @@ void kate::Interpreter::fetch() {
 void kate::Interpreter::decode() {
   std::uint8_t o = (cur_inst.raw & 0xf000) >> 12;
   switch (o) {
-    case 0x00:
+    case 0x00: case 0x0e:
       cur_inst.inst = static_cast<INSTRUCTION>(cur_inst.raw & 0x00ff);
+      cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
       break;
-    case 0x01: case 0x02: case 0x0a: case 0x0b:
+    case 0x01: case 0x02: case 0x0a:
       cur_inst.inst = static_cast<INSTRUCTION>(o);
       cur_inst.n = cur_inst.raw & 0x0fff;;
       break;
-    case 0x03: case 0x04: case 0x06: case 0x07: case 0x0c: case 0x0e: case 0x0f:
+    case 0x0b:
+      cur_inst.inst = static_cast<INSTRUCTION>(o);
+      cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
+      cur_inst.n = cur_inst.raw & 0x0fff;;
+      break;
+    case 0x03: case 0x04: case 0x06: case 0x07: case 0x0c: case 0x0f:
       cur_inst.inst = static_cast<INSTRUCTION>(o);
       cur_inst.x = (cur_inst.raw & 0x0f00) >> 8;
       cur_inst.n = cur_inst.raw & 0x00ff;
@@ -192,9 +243,11 @@ void kate::Interpreter::decode() {
 
 void kate::Interpreter::execute() {
   // execute instruction
+    std::uint8_t r = cur_inst.x;
+    std::uint8_t k = registers[cur_inst.x];
   switch (cur_inst.inst) {
     case CLEAR:
-      output_buffer.fill(0);
+      std::fill(output_buffer.begin(), output_buffer.end(), 0);
       break;
     case RET:
       --stack_pointer;
@@ -243,12 +296,28 @@ void kate::Interpreter::execute() {
       break;
     case JMP_OFF:
       prev_program_counter = program_counter - 2;
-      program_counter = cur_inst.n + registers[0];
+      if (quirks_jump_high_nubble_as_register) {
+        program_counter = cur_inst.n + registers[cur_inst.x];
+      } else {
+        program_counter = cur_inst.n + registers[0];
+      }
       break;
-    // case RANDOM       : return "RANDOM";
+    case RANDOM:
+      registers[cur_inst.x] = random_uint8() & cur_inst.n;
+      break;
     case DRAW: _DXYN(); break;
-    // case KEY_EQ       : return "KEY_EQ";
-    // case KEY_NE       : return "KEY_NE";
+    case KEY_EQ:
+      if (key_states[registers[cur_inst.x]] == true) {
+        prev_program_counter = program_counter;
+        program_counter += 2;
+      }
+      break;
+    case KEY_NE:
+      if (key_states[registers[cur_inst.x]] == false) {
+        prev_program_counter = program_counter;
+        program_counter += 2;
+      }
+      break;
     case MISC: _FXNN(); break;
     default:
       throw invalid_instruction(crashdump("NOT YET IMPLEMENTED"));
@@ -263,41 +332,72 @@ void kate::Interpreter::_8XYN() {
       break;
     case ALU_OP::OR:
       registers[cur_inst.x] |= registers[cur_inst.y];
+      if (kate::quirks_enable_flags_reset) {
+        registers[0xf] = 0;
+      }
       break;
     case ALU_OP::AND:
       registers[cur_inst.x] &= registers[cur_inst.y];
+      if (kate::quirks_enable_flags_reset) {
+        registers[0xf] = 0;
+      }
       break;
     case ALU_OP::XOR:
       registers[cur_inst.x] ^= registers[cur_inst.y];
+      if (kate::quirks_enable_flags_reset) {
+        registers[0xf] = 0;
+      }
       break;
     case ALU_OP::ADD:
-      tmp = registers[cur_inst.x] + registers[cur_inst.y];
-      if (tmp > 255) { registers[0xf] = 1; }
-      registers[cur_inst.x] = tmp;
+      tmp = registers[cur_inst.x];
+      registers[cur_inst.x] += registers[cur_inst.y];
+      registers[0xf] = registers[cur_inst.x] < tmp;
       break;
     case ALU_OP::SUB:
-      registers[0xf] = registers[cur_inst.x] > registers[cur_inst.y];
+      tmp = registers[cur_inst.x];
       registers[cur_inst.x] -= registers[cur_inst.y];
+      registers[0xf] = (registers[cur_inst.x] <= tmp) &&
+                       (registers[cur_inst.y] <= tmp);
       break;
     case ALU_OP::RSUB:
-      registers[0xf] = registers[cur_inst.x] < registers[cur_inst.y];
+      tmp = registers[cur_inst.x];
       registers[cur_inst.x] = registers[cur_inst.y] - registers[cur_inst.x];
+      registers[0xf] = tmp <= registers[cur_inst.y];
       break;
     case ALU_OP::SHL:
-      registers[0xf] = (registers[cur_inst.x] >> 7) & 0b1;
+      if (!quirks_shifting_ignores_y) {
+        registers[cur_inst.x] = registers[cur_inst.y];
+      }
+      tmp = (registers[cur_inst.x] >> 7) & 0b1;
       registers[cur_inst.x] <<= 1;
+      registers[0xf] = tmp;
       break;
     case ALU_OP::SHR:
-      registers[0xf] = registers[cur_inst.x] & 0b1;
+      if (!quirks_shifting_ignores_y) {
+        registers[cur_inst.x] = registers[cur_inst.y];
+      }
+      tmp = registers[cur_inst.x] & 0b1;
       registers[cur_inst.x] >>= 1;
+      registers[0xf] = tmp;
       break;
   }
 }
 
 void kate::Interpreter::_DXYN() {
+  if (quirks_vblank_wait && !is_vblank) {
+    // soft-block
+    program_counter = prev_program_counter;
+    return;
+  }
+
   // offsets wrap, drawing does not
-  std::uint8_t h_offset = registers[cur_inst.x] % SCR_W;
-  std::uint8_t v_offset = registers[cur_inst.y] % SCR_H;
+  std::uint8_t h_offset = registers[cur_inst.x];
+  std::uint8_t v_offset = registers[cur_inst.y];
+
+  if (quirks_sprite_clipping) {
+    h_offset %= SCR_W;
+    v_offset %= SCR_H;
+  }
 
   // clear flags register
   registers[0xf] = 0;
@@ -306,11 +406,17 @@ void kate::Interpreter::_DXYN() {
   for (std::size_t i = 0; i < cur_inst.n; ++i) {
     std::uint8_t data = ram[index_register + i];
     std::uint8_t ypos = v_offset + i;
+    if (!quirks_sprite_clipping) {
+      ypos %= SCR_H;
+    }
     std::size_t pixel_offset = ypos * SCR_W;
 
     // loop over pixels
     for (int p = 7; p >= 0; --p) {
       std::uint8_t xpos = h_offset + (7 - p);
+      if (!quirks_sprite_clipping) {
+        xpos %= SCR_W;
+      }
       std::size_t pixel_index = xpos + pixel_offset;
 
       bool pixel = (data >> p) & 1;
@@ -324,28 +430,45 @@ void kate::Interpreter::_DXYN() {
       output_buffer[pixel_index] ^= pixel;
 
       // skip to next line if edge of screen reached
-      if (xpos >= SCR_W) {
+      if (quirks_sprite_clipping && (xpos >= SCR_W)) {
         break;
       }
     }
 
     // stop drawing if off bottom of screen
-    if (ypos >= SCR_H) {
+    if (quirks_sprite_clipping && (ypos >= SCR_H)) {
       break;
     }
   }
+  is_vblank = false;
 }
 
 void kate::Interpreter::_FXNN() {
   switch (static_cast<MISC_OP>(cur_inst.n)) {
-    // case MISC_OP::GET_DT:
-    //   break;
-    // case MISC_OP::GET_KEY:
-    //   break;
-    // case MISC_OP::SET_DT:
-    //   break;
-    // case MISC_OP::SET_ST:
-    //   break;
+    case MISC_OP::GET_DT:
+      registers[cur_inst.x] = delay_timer;
+      break;
+    case MISC_OP::GET_KEY:
+      // if last key_event is not a release, soft-block
+      if (!is_blocking) {
+        last_key_event = {0, KEY_EVENT::NONE};
+        is_blocking = true;
+      }
+
+      if (last_key_event.second != KEY_EVENT::RELEASE) {
+        program_counter -= 2;
+      } else {
+        registers[cur_inst.x] = last_key_event.first;
+        is_blocking = false;
+        last_key_event = {0, KEY_EVENT::NONE};
+      }
+      break;
+    case MISC_OP::SET_DT:
+      delay_timer = registers[cur_inst.x];
+      break;
+    case MISC_OP::SET_ST:
+      sound_timer = registers[cur_inst.x];
+      break;
     case MISC_OP::GET_CHAR:
       index_register = char_pointer + (registers[cur_inst.x & 0xf] * 5);
       break;
@@ -362,8 +485,10 @@ void kate::Interpreter::_FXNN() {
         ram[index_register + i] = registers[i];
       }
 
-      if (!quirk_leave_index_load_store) {
-        index_register += cur_inst.x;
+      if (quirks_increment_index_register) {
+        // Note: the index register points to the address _after_ the
+        // last value written (write + increment for each register)
+        index_register += cur_inst.x + 1;
       }
       break;
     case MISC_OP::LOAD_REG:
@@ -371,8 +496,10 @@ void kate::Interpreter::_FXNN() {
         registers[i] = ram[index_register + i];
       }
 
-      if (!quirk_leave_index_load_store) {
-        index_register += cur_inst.x;
+      if (quirks_increment_index_register) {
+        // Note: the index register points to the address _after_ the
+        // last value written (write + increment for each register)
+        index_register += cur_inst.x + 1;
       }
       break;
     default:
