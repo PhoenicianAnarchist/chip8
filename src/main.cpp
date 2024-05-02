@@ -1,6 +1,5 @@
 #include <exception>
 #include <iostream>
-#include <map>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -38,27 +37,6 @@ void render_opengl(
   openglwrapper::Mesh &simple_mesh, openglwrapper::Shader &main_shader,
   openglwrapper::Texture &display_texture
 );
-
-// TODO: allow rebinding at runtime, and store user preferences.
-// <internal number, GLFW name>
-std::map<int, int> key_map = {
-  {0x00, GLFW_KEY_X},
-  {0x01, GLFW_KEY_1},
-  {0x02, GLFW_KEY_2},
-  {0x03, GLFW_KEY_3},
-  {0x04, GLFW_KEY_Q},
-  {0x05, GLFW_KEY_W},
-  {0x06, GLFW_KEY_E},
-  {0x07, GLFW_KEY_A},
-  {0x08, GLFW_KEY_S},
-  {0x09, GLFW_KEY_D},
-  {0x0a, GLFW_KEY_Z},
-  {0x0b, GLFW_KEY_C},
-  {0x0c, GLFW_KEY_4},
-  {0x0d, GLFW_KEY_R},
-  {0x0e, GLFW_KEY_F},
-  {0x0f, GLFW_KEY_V}
-};
 
 int main(int argc, const char *argv[]) {
   utils::OPTIONS options = utils::parse_command_line(argc, argv);
@@ -114,9 +92,9 @@ int main(int argc, const char *argv[]) {
   std::vector<std::uint8_t> rom = utils::read_binary(options.rom_path);
 
   for (std::uint8_t i = 0; i <= 0xf; ++i) {
-    openglwrapper::key_states[key_map[i]].is_pressed = false;
-    openglwrapper::key_states[key_map[i]].is_released = false;
-    openglwrapper::key_states[key_map[i]].is_handled = true;
+    openglwrapper::key_states[kate::key_map[i]].is_pressed = false;
+    openglwrapper::key_states[kate::key_map[i]].is_released = false;
+    openglwrapper::key_states[kate::key_map[i]].is_handled = true;
   }
 
   kate::Interpreter chip8 {};
@@ -246,14 +224,14 @@ void processInput(
   }
 
   for (int k = 0; k <= 0xf; ++k) {
-    if (!key_states[key_map[k]].is_handled) {
-      if (key_states[key_map[k]].is_pressed) {
+    if (!key_states[kate::key_map[k]].is_handled) {
+      if (key_states[kate::key_map[k]].is_pressed) {
         interpreter.keypress(k);
-      } else if (key_states[key_map[k]].is_released) {
+      } else if (key_states[kate::key_map[k]].is_released) {
         interpreter.keyrelease(k);
       }
 
-      key_states[key_map[k]].is_handled = true;
+      key_states[kate::key_map[k]].is_handled = true;
     }
   }
 }
@@ -287,14 +265,18 @@ void render_opengl(
     for (std::size_t x = 0; x < kate::SCR_W; ++x) {
       std::size_t index = x + offset;
 
-      // decrement value in display_texture to simulate fading
-      if (display_buffer[index] >= kate::FADERATE) {
-        display_buffer[index] -= kate::FADERATE;
-      }
+      if (kate::do_display_fade) {
+        if (display_buffer[index] >= kate::display_fade_rate) {
+          display_buffer[index] -= kate::display_fade_rate;
+        } else {
+          display_buffer[index] = 0;
+        }
 
-      // set new pixels at max brightness
-      if (buffer[index] == 1) {
-        display_buffer[index] = 255;
+        if (buffer[index] == 1) {
+          display_buffer[index] = 255;
+        }
+      } else {
+        display_buffer[index] = buffer[index] ? 255 : 0;
       }
     }
   }
