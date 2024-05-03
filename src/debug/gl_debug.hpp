@@ -1,7 +1,8 @@
 #ifndef __GL_DEBUG__
 #define __GL_DEBUG__
 
-#include <glad/glad.h>
+#include <glad/gl.h>
+#include <GLFW/glfw3.h>
 
 namespace debug {
   bool enableDebug();

@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-#include <glad/glad.h>
+#include <glad/gl.h>
 
 namespace openglwrapper {
   class Texture {

@@ -30,21 +30,32 @@ These keys can be rebound in the file `src/kate/config.hpp` if necessary.
 
 - GLFW3: https://www.glfw.org/
 - glm: https://github.com/g-truc/glm
-- glad: https://glad.dav1d.de/ (Core Profile, Version 4.6)
+- glad: https://gen.glad.sh/ (Core Profile, Version 4.6)
 
 Arch Linux:
-```pacman -S glfw glm```
-
-Note: The generator from the package `glad` uses the newer format which is
-incompatible with this program.
+```pacman -S glfw glm glad```
 
 ---
 
 ### Generating glad files
 
-This program uses glad as the loader, the necessary files can be generated
-here (https://glad.dav1d.de/) selecting `profile = core` and
-`api = (gl) version 4.6`.
+The glad loader files must be generated, either by the online generator, or by
+a local installation.
+
+#### Local generator
+
+`$ mkdir /tmp/glad`
+`$ cd /tmp/glad`
+`$ glad --api gl:core=4.6 --out-path /tmp/glad`
+
+Then the following commands are run, replacing `src/glad.c` with `src/gl.c`
+
+#### Online generator
+
+The following settings should be selected:
+- generator: c/c++
+- gl: version 4.6, core
+- extensions: GL_KHR_debug
 
 After unzipping the generated files, the following commands can be ran to
 compile and install the files to `/usr/local/`, or they can be put anywhere

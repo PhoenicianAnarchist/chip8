@@ -4,7 +4,7 @@
 #include <AL/al.h>
 #include <AL/alc.h>
 
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
 #include "debug/gl_debug.hpp"
@@ -234,7 +234,7 @@ GLFWwindow *init_opengl(
 
   glfwMakeContextCurrent(window);
 
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+  if (!gladLoadGL(glfwGetProcAddress)) {
     std::cerr << "Failed to load opengl functions" << std::endl;
     glfwTerminate();
     return nullptr;

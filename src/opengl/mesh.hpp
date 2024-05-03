@@ -5,7 +5,7 @@
 
 #include <glm/glm.hpp>
 
-#include <glad/glad.h>
+#include <glad/gl.h>
 
 namespace openglwrapper {
   struct Vertex {
