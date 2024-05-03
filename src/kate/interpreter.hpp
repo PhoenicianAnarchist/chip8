@@ -10,6 +10,7 @@
 #include <cstdint>
 
 #include "config.hpp"
+#include "memory_controller.hpp"
 
 namespace kate {
   class interpreter_error : public std::exception {
@@ -138,7 +139,8 @@ namespace kate {
     std::default_random_engine e;
     std::uniform_int_distribution<int> dist;
 
-    std::array<std::uint8_t, 0x4000> ram;
+    // std::array<std::uint8_t, 0x4000> ram;
+    MemoryController memory;
     std::array<std::uint8_t, 16> registers;
     std::array<std::uint8_t, 16> key_states;
     std::array<std::uint16_t, 16> stack;

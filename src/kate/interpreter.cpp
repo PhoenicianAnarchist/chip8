@@ -76,7 +76,6 @@ kate::Interpreter::Interpreter() {
 }
 
 void kate::Interpreter::reset() {
-  ram.fill(0);
   registers.fill(0);
   key_states.fill(0);
   stack.fill(0);
@@ -97,18 +96,13 @@ void kate::Interpreter::reset() {
   std::copy(
     char_data.begin(),
     char_data.end(),
-    &ram[char_pointer]
+    memory.get_active_bank().data().begin() + char_pointer
   );
 }
 
 void kate::Interpreter::load_rom(const std::vector<std::uint8_t> &rom) {
   reset();
-
-  std::copy(
-    rom.begin(),
-    rom.end(),
-    &ram[entry_point]
-  );
+  memory.write(entry_point, rom);
 }
 
 const std::vector<std::uint8_t> &kate::Interpreter::get_output_buffer() const {
@@ -208,10 +202,10 @@ void kate::Interpreter::fetch() {
 
   // fetch next instruction and increment PC
   cur_inst.raw <<= 8;
-  cur_inst.raw |= ram[program_counter];
+  cur_inst.raw |= memory[program_counter];
   ++program_counter;
   cur_inst.raw <<= 8;
-  cur_inst.raw |= ram[program_counter];
+  cur_inst.raw |= memory[program_counter];
   ++program_counter;
 }
 
@@ -408,7 +402,7 @@ void kate::Interpreter::_DXYN() {
 
   // each row in the sprite is 1 byte wide, stored sequentially
   for (std::size_t i = 0; i < cur_inst.n; ++i) {
-    std::uint8_t data = ram[index_register + i];
+    std::uint8_t data = memory[index_register + i];
     std::uint8_t ypos = v_offset + i;
     if (!quirks_sprite_clipping) {
       ypos %= SCR_H;
@@ -480,13 +474,13 @@ void kate::Interpreter::_FXNN() {
       index_register += registers[cur_inst.x];
       break;
     case MISC_OP::BCD:
-      ram[index_register]     =  registers[cur_inst.x]        / 100;
-      ram[index_register + 1] = (registers[cur_inst.x] % 100) /  10;
-      ram[index_register + 2] =  registers[cur_inst.x] %  10;
+      memory[index_register]     =  registers[cur_inst.x]        / 100;
+      memory[index_register + 1] = (registers[cur_inst.x] % 100) /  10;
+      memory[index_register + 2] =  registers[cur_inst.x] %  10;
       break;
     case MISC_OP::STORE_REG:
       for (std::size_t i = 0; i <= cur_inst.x; ++i) {
-        ram[index_register + i] = registers[i];
+        memory[index_register + i] = registers[i];
       }
 
       if (quirks_increment_index_register) {
@@ -497,7 +491,7 @@ void kate::Interpreter::_FXNN() {
       break;
     case MISC_OP::LOAD_REG:
       for (std::size_t i = 0; i <= cur_inst.x; ++i) {
-        registers[i] = ram[index_register + i];
+        registers[i] = memory[index_register + i];
       }
 
       if (quirks_increment_index_register) {
