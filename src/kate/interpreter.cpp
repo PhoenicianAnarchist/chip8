@@ -115,6 +115,10 @@ const std::vector<std::uint8_t> &kate::Interpreter::get_output_buffer() const {
   return output_buffer;
 }
 
+std::uint8_t kate::Interpreter::get_sound_timer() const {
+  return sound_timer;
+}
+
 std::string kate::Interpreter::crashdump(const std::string &msg) const {
   std::stringstream ss;
   ss << "ABORTING EXECUTION: " << msg << '\n';

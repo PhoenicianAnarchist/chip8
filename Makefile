@@ -3,7 +3,7 @@ OBJECTS=$(patsubst src/%,build/%,${SOURCES:.cpp=.o})
 DIRS=$(sort $(dir ${OBJECTS}))
 
 CXX_FLAGS=
-LD_FLAGS=-lGL -lglfw -lglad
+LD_FLAGS=-lGL -lglfw -lglad -lopenal
 
 NAME=kate
 BINARY=out/${NAME}
