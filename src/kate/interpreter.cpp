@@ -32,25 +32,25 @@ kate::stack_overflow::stack_overflow(const char *msg)
 
 std::string kate::decode_INSTRUCTION(INSTRUCTION inst) {
   switch (inst) {
-    case CLEAR        : return "CLEAR";
-    case RET          : return "RET";
-    case JMP          : return "JMP";
-    case CALL         : return "CALL";
-    case SKIP_EQ_IMM  : return "SKIP_EQ_IMM";
-    case SKIP_NE_IMM  : return "SKIP_NE_IMM";
-    case SKIP_EQ_REG  : return "SKIP_EQ_REG";
-    case SKIP_NE_REG  : return "SKIP_NE_REG";
-    case MOV          : return "MOV";
-    case ADD          : return "ADD";
-    case ALU          : return "ALU";
-    case LDI          : return "LDI";
-    case JMP_OFF      : return "JMP_OFF";
-    case RANDOM       : return "RANDOM";
-    case DRAW         : return "DRAW";
-    case KEY_EQ       : return "KEY_EQ";
-    case KEY_NE       : return "KEY_NE";
-    case MISC         : return "MISC";
-    default           : return "UNKNOWN INSTRUCTION";
+    case INSTRUCTION::CLEAR         : return "CLEAR";
+    case INSTRUCTION::RET           : return "RET";
+    case INSTRUCTION::JMP           : return "JMP";
+    case INSTRUCTION::CALL          : return "CALL";
+    case INSTRUCTION::SKIP_EQ_IMM   : return "SKIP_EQ_IMM";
+    case INSTRUCTION::SKIP_NE_IMM   : return "SKIP_NE_IMM";
+    case INSTRUCTION::SKIP_EQ_REG   : return "SKIP_EQ_REG";
+    case INSTRUCTION::SKIP_NE_REG   : return "SKIP_NE_REG";
+    case INSTRUCTION::MOV           : return "MOV";
+    case INSTRUCTION::ADD           : return "ADD";
+    case INSTRUCTION::ALU           : return "ALU";
+    case INSTRUCTION::LDI           : return "LDI";
+    case INSTRUCTION::JMP_OFF       : return "JMP_OFF";
+    case INSTRUCTION::RANDOM        : return "RANDOM";
+    case INSTRUCTION::DRAW          : return "DRAW";
+    case INSTRUCTION::KEY_EQ        : return "KEY_EQ";
+    case INSTRUCTION::KEY_NE        : return "KEY_NE";
+    case INSTRUCTION::MISC          : return "MISC";
+    default                         : return "UNKNOWN INSTRUCTION";
   }
 }
 
@@ -89,7 +89,7 @@ void kate::Interpreter::reset() {
   std::fill(output_buffer.begin(), output_buffer.end(), 0);
   is_blocking = false;
   is_vblank = false;
-  cur_inst = {0, NOP, 0, 0, 0};
+  cur_inst = {0, INSTRUCTION::NOP, 0, 0, 0};
   cycle_counter = 0;
   last_key_event = {0, KEY_EVENT::NONE};
 
@@ -195,7 +195,7 @@ void kate::Interpreter::fetch() {
   if (program_counter >= 0x4000) {
     throw invalid_address(crashdump("PC out of range"));
   }
-  cur_inst = {0, NOP, 0, 0, 0};
+  cur_inst = {0, INSTRUCTION::NOP, 0, 0, 0};
 
   // save address of current instruction for debug purposes
   prev_program_counter = program_counter;
@@ -244,55 +244,64 @@ void kate::Interpreter::execute() {
     std::uint8_t r = cur_inst.x;
     std::uint8_t k = registers[cur_inst.x];
   switch (cur_inst.inst) {
-    case CLEAR:
+    case INSTRUCTION::CLEAR:
       std::fill(output_buffer.begin(), output_buffer.end(), 0);
       break;
-    case RET:
+    case INSTRUCTION::RET:
       --stack_pointer;
       program_counter = stack[stack_pointer];
       break;
-    case JMP:
+    case INSTRUCTION::JMP:
       prev_program_counter = program_counter - 2;
       program_counter = cur_inst.n;
       break;
-    case CALL:
+    case INSTRUCTION::CALL:
       if (stack_pointer >= 16) {
         throw stack_overflow(crashdump("STACK OVERFLOW"));
       }
       stack[stack_pointer] = program_counter;
       ++stack_pointer;
       program_counter = cur_inst.n;
-    case SKIP_EQ_IMM:
+    case INSTRUCTION::SKIP_EQ_IMM:
       if (registers[cur_inst.x] == cur_inst.n) {
         program_counter += 2;
       }
       break;
-    case SKIP_NE_IMM:
+    case INSTRUCTION::SKIP_NE_IMM:
       if (registers[cur_inst.x] != cur_inst.n) {
         program_counter += 2;
       }
       break;
-    case SKIP_EQ_REG:
+    case INSTRUCTION::SKIP_EQ_REG:
       if (registers[cur_inst.x] == registers[cur_inst.y]) {
         program_counter += 2;
       }
       break;
-    case SKIP_NE_REG:
+    case INSTRUCTION::SKIP_NE_REG:
       if (registers[cur_inst.x] != registers[cur_inst.y]) {
         program_counter += 2;
       }
       break;
-    case MOV:
+    case INSTRUCTION::MOV:
       registers[cur_inst.x] = cur_inst.n;
       break;
-    case ADD:
+    case INSTRUCTION::ADD:
       registers[cur_inst.x] += cur_inst.n;
       break;
-    case ALU: _8XYN(); break;
-    case LDI:
+    case INSTRUCTION::ALU:
+      alu.x = registers[cur_inst.x];
+      alu.y = registers[cur_inst.y];
+      alu.f = registers[0xf];
+      alu.op = static_cast<ALU_OP>(cur_inst.n);
+      alu.execute();
+      registers[cur_inst.x] = alu.x;
+      registers[0xf] = alu.f;
+
+      break;
+    case INSTRUCTION::LDI:
       index_register = cur_inst.n;
       break;
-    case JMP_OFF:
+    case INSTRUCTION::JMP_OFF:
       prev_program_counter = program_counter - 2;
       if (quirks_jump_high_nubble_as_register) {
         program_counter = cur_inst.n + registers[cur_inst.x];
@@ -300,84 +309,25 @@ void kate::Interpreter::execute() {
         program_counter = cur_inst.n + registers[0];
       }
       break;
-    case RANDOM:
+    case INSTRUCTION::RANDOM:
       registers[cur_inst.x] = random_uint8() & cur_inst.n;
       break;
-    case DRAW: _DXYN(); break;
-    case KEY_EQ:
+    case INSTRUCTION::DRAW: _DXYN(); break;
+    case INSTRUCTION::KEY_EQ:
       if (key_states[registers[cur_inst.x]] == true) {
         prev_program_counter = program_counter;
         program_counter += 2;
       }
       break;
-    case KEY_NE:
+    case INSTRUCTION::KEY_NE:
       if (key_states[registers[cur_inst.x]] == false) {
         prev_program_counter = program_counter;
         program_counter += 2;
       }
       break;
-    case MISC: _FXNN(); break;
+    case INSTRUCTION::MISC: _FXNN(); break;
     default:
       throw invalid_instruction(crashdump("NOT YET IMPLEMENTED"));
-  }
-}
-
-void kate::Interpreter::_8XYN() {
-  uint16_t tmp = 0;
-  switch (static_cast<ALU_OP>(cur_inst.n)) {
-    case ALU_OP::MOV:
-      registers[cur_inst.x] = registers[cur_inst.y];
-      break;
-    case ALU_OP::OR:
-      registers[cur_inst.x] |= registers[cur_inst.y];
-      if (kate::quirks_enable_flags_reset) {
-        registers[0xf] = 0;
-      }
-      break;
-    case ALU_OP::AND:
-      registers[cur_inst.x] &= registers[cur_inst.y];
-      if (kate::quirks_enable_flags_reset) {
-        registers[0xf] = 0;
-      }
-      break;
-    case ALU_OP::XOR:
-      registers[cur_inst.x] ^= registers[cur_inst.y];
-      if (kate::quirks_enable_flags_reset) {
-        registers[0xf] = 0;
-      }
-      break;
-    case ALU_OP::ADD:
-      tmp = registers[cur_inst.x];
-      registers[cur_inst.x] += registers[cur_inst.y];
-      registers[0xf] = registers[cur_inst.x] < tmp;
-      break;
-    case ALU_OP::SUB:
-      tmp = registers[cur_inst.x];
-      registers[cur_inst.x] -= registers[cur_inst.y];
-      registers[0xf] = (registers[cur_inst.x] <= tmp) &&
-                       (registers[cur_inst.y] <= tmp);
-      break;
-    case ALU_OP::RSUB:
-      tmp = registers[cur_inst.x];
-      registers[cur_inst.x] = registers[cur_inst.y] - registers[cur_inst.x];
-      registers[0xf] = tmp <= registers[cur_inst.y];
-      break;
-    case ALU_OP::SHL:
-      if (!quirks_shifting_ignores_y) {
-        registers[cur_inst.x] = registers[cur_inst.y];
-      }
-      tmp = (registers[cur_inst.x] >> 7) & 0b1;
-      registers[cur_inst.x] <<= 1;
-      registers[0xf] = tmp;
-      break;
-    case ALU_OP::SHR:
-      if (!quirks_shifting_ignores_y) {
-        registers[cur_inst.x] = registers[cur_inst.y];
-      }
-      tmp = registers[cur_inst.x] & 0b1;
-      registers[cur_inst.x] >>= 1;
-      registers[0xf] = tmp;
-      break;
   }
 }
 

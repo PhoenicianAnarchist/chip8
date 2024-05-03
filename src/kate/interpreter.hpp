@@ -10,6 +10,7 @@
 #include <cstdint>
 
 #include "config.hpp"
+#include "alu.hpp"
 #include "memory_controller.hpp"
 
 namespace kate {
@@ -42,7 +43,7 @@ namespace kate {
     explicit stack_overflow(const char* msg);
   };
 
-  enum INSTRUCTION {
+  enum class INSTRUCTION {
     NOP         = 0x00,
     CLEAR       = 0xe0,
     RET         = 0xee,
@@ -62,18 +63,6 @@ namespace kate {
     KEY_EQ      = 0x9e,
     KEY_NE      = 0xa1,
     MISC        = 0x0f
-  };
-
-  enum class ALU_OP {
-    MOV   = 0x00,
-    OR    = 0x01,
-    AND   = 0x02,
-    XOR   = 0x03,
-    ADD   = 0x04,
-    SUB   = 0x05,
-    RSUB  = 0x07,
-    SHR   = 0x06,
-    SHL   = 0x0e
   };
 
   enum class MISC_OP {
@@ -131,7 +120,6 @@ namespace kate {
     void decode();
     void execute();
 
-    void _8XYN();
     void _DXYN();
     void _FXNN();
 
@@ -139,8 +127,9 @@ namespace kate {
     std::default_random_engine e;
     std::uniform_int_distribution<int> dist;
 
-    // std::array<std::uint8_t, 0x4000> ram;
     MemoryController memory;
+    ALU alu;
+
     std::array<std::uint8_t, 16> registers;
     std::array<std::uint8_t, 16> key_states;
     std::array<std::uint16_t, 16> stack;

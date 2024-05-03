@@ -2,6 +2,17 @@
 
 A CHIP8 interpreter written in C++ using OpenGL.
 
+## Building
+
+Specific variant behaviour can be enabled during building. If not variant is
+selected, the default is `cosmac`
+
+`make VARIANT=cosmac`
+
+### Variants:
+
+- `cosmac` : The original COSMAC VIP CHIP8 implementation.
+
 ## Usage
 
 `kate --rom <path/to/ch8/file>`
@@ -92,11 +103,11 @@ future emulation projects.
 
 This will likely consist of:
 
-- the base "system" which handles basic I/O and ties everything together
-- a processor
-- memory controller (basic in this case, but extensible)
-- dedicated ALU for `8000` instructions
-- graphics processor which handles the draw calls
+- [ ] the base "system" which handles basic I/O and ties everything together
+- [ ] a processor
+- [x] memory controller (basic in this case, but extensible)
+- [x] dedicated ALU for `8000` instructions
+- [ ] graphics processor which handles the draw calls
 
 ### debugging tools
 

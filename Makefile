@@ -2,20 +2,25 @@ SOURCES=$(wildcard src/*.cpp) $(wildcard src/*/*.cpp)
 OBJECTS=$(patsubst src/%,build/%,${SOURCES:.cpp=.o})
 DIRS=$(sort $(dir ${OBJECTS}))
 
-CXX_FLAGS=
-LD_FLAGS=-lGL -lglfw -lglad -lopenal
+CXXFLAGS=
+LDFLAGS=-lGL -lglfw -lglad -lopenal
 
 NAME=kate
 BINARY=out/${NAME}
+
+VARIANT?=cosmac
+ifeq ($(VARIANT),cosmac)
+CXXFLAGS+=-DQUIRK_F
+endif
 
 .PHONY: all
 all: dirs ${BINARY}
 
 ${BINARY}: ${OBJECTS}
-	g++ ${LD_FLAGS} -o $@ $^
+	g++ ${LDFLAGS} -o $@ $^
 
 build/%.o: src/%.cpp
-	g++ ${CXX_FLAGS} -o $@ -c $<
+	g++ ${CXXFLAGS} -o $@ -c $<
 
 .PHONY: dirs
 dirs:
