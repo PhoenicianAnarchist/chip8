@@ -10,7 +10,7 @@ BINARY=out/${NAME}
 
 VARIANT?=cosmac
 ifeq ($(VARIANT),cosmac)
-CXXFLAGS+=-DQUIRK_F
+CXXFLAGS+=-DQUIRK_F -DQUIRK_V -DQUIRK_C
 endif
 
 .PHONY: all

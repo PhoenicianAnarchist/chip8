@@ -59,22 +59,17 @@ namespace kate {
   ****************************************************************************/
 
   // COSMAC VIP CHIP-8
-  constexpr bool quirks_enable_flags_reset            = true;
+  // constexpr bool quirks_enable_flags_reset            = true;
   constexpr bool quirks_increment_index_register      = true;
-  constexpr bool quirks_vblank_wait                   = true;
-  constexpr bool quirks_sprite_clipping               = true;
-  constexpr bool quirks_shifting_ignores_y            = false;
+  // constexpr bool quirks_vblank_wait                   = true;
+  // constexpr bool quirks_sprite_clipping               = true;
+  // constexpr bool quirks_shifting_ignores_y            = false;
   constexpr bool quirks_jump_high_nubble_as_register  = false;
 
   /****************************************************************************
   / Internal Configuration.                                                   /
   / These values should not be changed unless you know what you're doing.     /
   ****************************************************************************/
-
-  // display settings
-  constexpr std::size_t SCR_W = 64;
-  constexpr std::size_t SCR_H = 32;
-  constexpr std::size_t display_refresh_rate = 60;
 
   // location of the first address to execute
   constexpr std::uint16_t entry_point   = 0x0200;

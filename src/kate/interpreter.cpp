@@ -85,10 +85,10 @@ void kate::Interpreter::reset() {
   delay_timer = 0;
   sound_timer = 0;
 
-  output_buffer.resize(SCR_W * SCR_H);
-  std::fill(output_buffer.begin(), output_buffer.end(), 0);
+  // output_buffer.resize(SCR_W * SCR_H);
+  // std::fill(output_buffer.begin(), output_buffer.end(), 0);
   is_blocking = false;
-  is_vblank = false;
+  // is_vblank = false;
   cur_inst = {0, INSTRUCTION::NOP, 0, 0, 0};
   cycle_counter = 0;
   last_key_event = {0, KEY_EVENT::NONE};
@@ -106,7 +106,7 @@ void kate::Interpreter::load_rom(const std::vector<std::uint8_t> &rom) {
 }
 
 const std::vector<std::uint8_t> &kate::Interpreter::get_output_buffer() const {
-  return output_buffer;
+  return display_adapter.get_output_buffer();
 }
 
 std::uint8_t kate::Interpreter::get_sound_timer() const {
@@ -188,7 +188,7 @@ void kate::Interpreter::step() {
 }
 
 void kate::Interpreter::vblank_trigger() {
-  is_vblank = true;
+  display_adapter.vblank_interrupt();
 }
 
 void kate::Interpreter::fetch() {
@@ -245,7 +245,7 @@ void kate::Interpreter::execute() {
     std::uint8_t k = registers[cur_inst.x];
   switch (cur_inst.inst) {
     case INSTRUCTION::CLEAR:
-      std::fill(output_buffer.begin(), output_buffer.end(), 0);
+      display_adapter.clear();
       break;
     case INSTRUCTION::RET:
       --stack_pointer;
@@ -332,63 +332,24 @@ void kate::Interpreter::execute() {
 }
 
 void kate::Interpreter::_DXYN() {
-  if (quirks_vblank_wait && !is_vblank) {
-    // soft-block
+  if (display_adapter.is_waiting_for_data()) {
+    display_adapter.h_offset = registers[cur_inst.x];
+    display_adapter.v_offset = registers[cur_inst.y];
+    display_adapter.line_count = cur_inst.n;
+
+    for (std::size_t i = 0; i < cur_inst.n; ++i) {
+      display_adapter.sprite_data[i] = memory[index_register + i];
+    }
+
+    display_adapter.data_interrupt();
+  }
+
+  if (display_adapter.is_waiting_for_vblank()) {
     program_counter = prev_program_counter;
     return;
   }
 
-  // offsets wrap, drawing does not
-  std::uint8_t h_offset = registers[cur_inst.x];
-  std::uint8_t v_offset = registers[cur_inst.y];
-
-  if (quirks_sprite_clipping) {
-    h_offset %= SCR_W;
-    v_offset %= SCR_H;
-  }
-
-  // clear flags register
-  registers[0xf] = 0;
-
-  // each row in the sprite is 1 byte wide, stored sequentially
-  for (std::size_t i = 0; i < cur_inst.n; ++i) {
-    std::uint8_t data = memory[index_register + i];
-    std::uint8_t ypos = v_offset + i;
-    if (!quirks_sprite_clipping) {
-      ypos %= SCR_H;
-    }
-    std::size_t pixel_offset = ypos * SCR_W;
-
-    // loop over pixels
-    for (int p = 7; p >= 0; --p) {
-      std::uint8_t xpos = h_offset + (7 - p);
-      if (!quirks_sprite_clipping) {
-        xpos %= SCR_W;
-      }
-      std::size_t pixel_index = xpos + pixel_offset;
-
-      bool pixel = (data >> p) & 1;
-
-      // set flag if pixel will be turned off
-      if (pixel & output_buffer[pixel_index]) {
-        registers[0xf] = 1;
-      }
-
-      // screen is updated via xor
-      output_buffer[pixel_index] ^= pixel;
-
-      // skip to next line if edge of screen reached
-      if (quirks_sprite_clipping && (xpos >= SCR_W)) {
-        break;
-      }
-    }
-
-    // stop drawing if off bottom of screen
-    if (quirks_sprite_clipping && (ypos >= SCR_H)) {
-      break;
-    }
-  }
-  is_vblank = false;
+  registers[0xf] = display_adapter.draw();
 }
 
 void kate::Interpreter::_FXNN() {

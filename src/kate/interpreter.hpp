@@ -11,6 +11,7 @@
 
 #include "config.hpp"
 #include "alu.hpp"
+#include "display_adapter.hpp"
 #include "memory_controller.hpp"
 
 namespace kate {
@@ -129,6 +130,7 @@ namespace kate {
 
     MemoryController memory;
     ALU alu;
+    Display display_adapter;
 
     std::array<std::uint8_t, 16> registers;
     std::array<std::uint8_t, 16> key_states;
@@ -139,11 +141,7 @@ namespace kate {
     std::uint8_t delay_timer;
     std::uint8_t sound_timer;
 
-    // each pixel is stored as a whole byte.
-    // this is inneficcient but inconsequential.
-    std::vector<std::uint8_t> output_buffer;
     bool is_blocking;
-    bool is_vblank;
     Instruction cur_inst;
     std::uint64_t cycle_counter;
     std::uint16_t prev_program_counter;
