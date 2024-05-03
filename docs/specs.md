@@ -76,43 +76,9 @@ a s d f
 z x c v
 ```
 
-## Fetch / Decode / Execute Loop
-
-### Timing
+## Timing
 
 Various older hardware ran at different speeds from 1MHz to 4MHz. A standard of
 around 700 instructions per second works well for most programs.
 
-The speed should be configurable.
-
-### Fetch
-
-Each instruction is two bytes wide.
-
-```c++
-
-// read instruction
-instruction <<= 8;
-instruction |= ram[pc];
-++pc;
-instruction <<= 8;
-instruction |= ram[pc];
-++pc;
-
-```
-
-### Decode
-
-Some similar instructions are grouped by the first nibble, with the other three
-being operands/data.
-
-Instructions will be written with placeholders, e.g. `DXYN`, `BXNN`, etc. where
-`X` and `Y` are register indices, `N` and `NN` and `NNN` are numbers of various
-widths.
-
-Note: This is the reason why addresses are only 12-bits wide.
-
-### Execute
-
-Each instruction is executed after decoding. This will likely be combined with
-the Decode stage in a `switch` statement.
+The speed is configurable should it be necessary.

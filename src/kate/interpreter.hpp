@@ -113,6 +113,7 @@ namespace kate {
     void reset();
     void load_rom(const std::vector<std::uint8_t> &rom);
     const std::vector<std::uint8_t> &get_output_buffer() const;
+    std::uint8_t get_sound_timer() const;
     std::string crashdump(const std::string &msg) const;
     std::string debug_line() const;
     std::string debug_filename() const;

@@ -1,6 +1,9 @@
 #include <exception>
 #include <iostream>
 
+#include <AL/al.h>
+#include <AL/alc.h>
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
@@ -89,6 +92,41 @@ int main(int argc, const char *argv[]) {
     display_buffer, kate::SCR_W, kate::SCR_H, 1
   );
 
+  // basic audio system
+  ALCdevice *Device = alcOpenDevice(nullptr);
+  ALCcontext *Context = alcCreateContext(Device, nullptr);
+  alcMakeContextCurrent(Context);
+
+  ALuint audio_buffer;
+  alGenBuffers(1, &audio_buffer);
+
+  // generate a simple square wave tone
+  // TODO: fix audio clipping at begining/end of tone
+  std::vector<std::uint8_t> audio_data;
+  std::size_t freq = 440;
+  std::size_t samples = freq * 10;
+
+  for (std::size_t i = 0; i < samples; ++i) {
+    if (i & 0b1) {
+      audio_data.push_back(0xff);
+    } else {
+      audio_data.push_back(0x00);
+    }
+  }
+
+  alBufferData(
+    audio_buffer,
+    AL_FORMAT_MONO8,
+    audio_data.data(),
+    audio_data.size(),
+    freq * 2
+  );
+
+  ALuint audio_source;
+  alGenSources(1, &audio_source);
+  alSourcei(audio_source, AL_BUFFER, audio_buffer);
+
+  // interpreter
   std::vector<std::uint8_t> rom = utils::read_binary(options.rom_path);
 
   for (std::uint8_t i = 0; i <= 0xf; ++i) {
@@ -142,6 +180,17 @@ int main(int argc, const char *argv[]) {
       }
       chip8.vblank_trigger();
       chip8.decrement_timers();
+
+      if (chip8.get_sound_timer() > 0) {
+        ALint state;
+        alGetSourcei(audio_source, AL_SOURCE_STATE, &state);
+
+        if (state != AL_PLAYING) {
+          alSourcePlay(audio_source);
+        }
+      } else {
+        alSourcePause(audio_source);
+      }
 
       glClear(GL_COLOR_BUFFER_BIT);
 
