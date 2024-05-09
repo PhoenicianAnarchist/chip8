@@ -1,6 +1,7 @@
 #include <exception>
 #include <sstream>
 
+#include "error.hpp"
 #include "memory_controller.hpp"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -43,6 +44,10 @@ std::array<std::uint8_t, 0x1000>& kate::RAM::data() {
   return memory;
 }
 
+void kate::RAM::clear(std::uint8_t value) {
+  memory.fill(value);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // MemoryController
 
@@ -53,6 +58,12 @@ std::uint8_t kate::MemoryController::at(std::size_t index) const {
 }
 
 std::uint8_t& kate::MemoryController::operator[](std::size_t index) {
+  if (index >= ram.size()) {
+    std::stringstream ss;
+    ss << "Memory access out of range : " << index;
+    throw invalid_address(ss.str());
+  }
+
   return ram[index];
 }
 

@@ -36,37 +36,6 @@ namespace kate {
   };
 
   /****************************************************************************
-  * Some implementations differ in behaviour for various reasons, these flags *
-  * will enable/disable "quirks".                                             *
-  *****************************************************************************
-  * quirks_enable_flags_reset                                                 *
-  *     8XY1, 8XY2, and 8XY3 reset the flags register to zero                 *
-  *                                                                           *
-  * quirks_increment_index_register                                           *
-  *     FX55 and FX65 increment the index register                            *
-  *                                                                           *
-  * quirks_vblank_wait                                                        *
-  *     Sprite drawing waits for the vblank interupt                          *
-  *                                                                           *
-  * quirks_sprite_clipping                                                    *
-  *     Sprite coordinates wrap, but sprites are clipped                      *
-  *                                                                           *
-  * quirks_shifting_ignores_y                                                 *
-  *     8XY6 and 8XYE ignore the Y register and shift X instead               *
-  *                                                                           *
-  * quirks_jump_high_nubble_as_register                                       *
-  *     Treat the highest nibble in BNNN as the register address              *
-  ****************************************************************************/
-
-  // COSMAC VIP CHIP-8
-  // constexpr bool quirks_enable_flags_reset            = true;
-  constexpr bool quirks_increment_index_register      = true;
-  // constexpr bool quirks_vblank_wait                   = true;
-  // constexpr bool quirks_sprite_clipping               = true;
-  // constexpr bool quirks_shifting_ignores_y            = false;
-  constexpr bool quirks_jump_high_nubble_as_register  = false;
-
-  /****************************************************************************
   / Internal Configuration.                                                   /
   / These values should not be changed unless you know what you're doing.     /
   ****************************************************************************/
@@ -76,7 +45,7 @@ namespace kate {
 
   // built-in character sprite data
   constexpr std::uint16_t char_pointer  = 0x0050;
-  constexpr std::array<std::uint8_t, 16*5> char_data = {
+  const std::vector<std::uint8_t> character_data = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
     0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2

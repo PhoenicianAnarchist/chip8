@@ -9,7 +9,8 @@
 
 #include "debug/gl_debug.hpp"
 #include "debug/glfw_debug.hpp"
-#include "kate/interpreter.hpp"
+#include "kate/error.hpp"
+#include "kate/system.hpp"
 #include "opengl/exceptions.hpp"
 #include "opengl/input.hpp"
 #include "opengl/mesh.hpp"
@@ -30,7 +31,7 @@ GLFWwindow *init_opengl(
 
 void processInput(
   GLFWwindow *window, std::map<int, openglwrapper::KeyState> &key_states,
-  kate::Interpreter &interpreter
+  kate::System &system
 );
 
 void render_console(const std::vector<std::uint8_t> &buffer);
@@ -126,7 +127,7 @@ int main(int argc, const char *argv[]) {
   alGenSources(1, &audio_source);
   alSourcei(audio_source, AL_BUFFER, audio_buffer);
 
-  // interpreter
+  // system
   std::vector<std::uint8_t> rom = utils::read_binary(options.rom_path);
 
   for (std::uint8_t i = 0; i <= 0xf; ++i) {
@@ -135,7 +136,7 @@ int main(int argc, const char *argv[]) {
     openglwrapper::key_states[kate::key_map[i]].is_handled = true;
   }
 
-  kate::Interpreter chip8 {};
+  kate::System chip8 {};
   chip8.load_rom(rom);
 
   utils::Clock clock;
@@ -165,7 +166,7 @@ int main(int argc, const char *argv[]) {
 
       try {
         chip8.step();
-      } catch (kate::interpreter_error &e) {
+      } catch (kate::system_error &e) {
         std::cerr << e.what() << std::endl;
         glfwSetWindowShouldClose(window, true);
         break;
@@ -252,7 +253,7 @@ GLFWwindow *init_opengl(
 
 void processInput(
   GLFWwindow *window, std::map<int, openglwrapper::KeyState> &key_states,
-  kate::Interpreter &interpreter
+  kate::System &system
 ) {
   if (key_states[GLFW_KEY_ESCAPE].is_pressed) {
     glfwSetWindowShouldClose(window, true);
@@ -260,10 +261,10 @@ void processInput(
 
   if (key_states[GLFW_KEY_P].is_pressed && !key_states[GLFW_KEY_P].is_handled) {
     std::filesystem::path directory = "output";
-    std::string fn = interpreter.debug_filename();
+    std::string fn = system.debug_filename();
 
     utils::save_pnm(
-      interpreter.get_output_buffer(), kate::SCR_W, kate::SCR_H,
+      system.get_output_buffer(), kate::SCR_W, kate::SCR_H,
       directory, fn, utils::PGM_RAW, true, "1"
     );
 
@@ -275,9 +276,9 @@ void processInput(
   for (int k = 0; k <= 0xf; ++k) {
     if (!key_states[kate::key_map[k]].is_handled) {
       if (key_states[kate::key_map[k]].is_pressed) {
-        interpreter.keypress(k);
+        system.keypress(k);
       } else if (key_states[kate::key_map[k]].is_released) {
-        interpreter.keyrelease(k);
+        system.keyrelease(k);
       }
 
       key_states[kate::key_map[k]].is_handled = true;

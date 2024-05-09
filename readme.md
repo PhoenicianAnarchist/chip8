@@ -103,11 +103,11 @@ future emulation projects.
 
 This will likely consist of:
 
-- [ ] the base "system" which handles basic I/O and ties everything together
-- [ ] a processor
+- [x] the base "system" which handles basic I/O and ties everything together
+- [x] a processor
 - [x] memory controller (basic in this case, but extensible)
 - [x] dedicated ALU for `8000` instructions
-- [ ] graphics processor which handles the draw calls
+- [x] graphics processor which handles the draw calls
 
 ### debugging tools
 

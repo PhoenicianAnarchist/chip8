@@ -13,7 +13,6 @@ namespace kate {
 
   class ROM {
   public:
-    ROM() = default;
     ROM(const std::array<std::uint8_t, rom_bank_size>& data);
 
     const std::uint8_t& at(std::size_t index) const;
@@ -21,7 +20,7 @@ namespace kate {
     std::size_t size() const;
     const std::array<std::uint8_t, rom_bank_size>& data() const;
   private:
-    mutable std::array<std::uint8_t, rom_bank_size> memory;
+    const std::array<std::uint8_t, rom_bank_size> memory;
   };
 
   class RAM {
@@ -34,6 +33,8 @@ namespace kate {
 
     std::size_t size() const;
     std::array<std::uint8_t, ram_bank_size>& data();
+
+    void clear(std::uint8_t value=0);
   private:
     std::array<std::uint8_t, ram_bank_size> memory;
   };
